@@ -5,6 +5,7 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
 
@@ -126,9 +127,10 @@ android {
         compose = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.7.1"
-    }
+    // NOTE (CI Run #26, 2026-11-15): with the Compose Compiler Gradle
+    // plugin applied above, no composeOptions block is needed — the plugin
+    // carries the compiler version that matches Kotlin 2.1.0. The old
+    // kotlinCompilerExtensionVersion setting is removed.
 
     packaging {
         resources {
