@@ -1,0 +1,65 @@
+name: keel
+description: "Keel — offline organization manager. One manager. Many teams. Everything stays on your phone."
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.0
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State
+  flutter_riverpod: 2.6.1
+  # Local database (Drift / SQLite)
+  drift: 2.28.1
+  sqlite3_flutter_libs: 0.5.24
+  path: 1.9.1
+  path_provider: 2.1.5
+  # Settings persistence
+  shared_preferences: 2.5.3
+  # Local notifications (daily digest only, fully offline)
+  flutter_local_notifications: 19.4.2
+  timezone: 0.10.1
+  # Files: backup/restore via Storage Access Framework, photos
+  file_picker: 10.3.2
+  image_picker: 1.2.0
+  archive: 4.0.7
+  # Intents
+  url_launcher: 6.3.2
+  # Formatting + ids
+  intl: 0.20.2
+  uuid: 4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: 5.0.0
+  drift_dev: 2.28.1
+  build_runner: 2.7.1
+
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Nunito-ExtraBold.ttf
+          weight: 800
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+  assets:
+    - assets/fonts/
