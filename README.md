@@ -146,3 +146,7 @@ Keel is designed and developed by **Aby Bijo** —
 [GitHub](https://github.com/AbyBijo) ·
 [LinkedIn](https://www.linkedin.com/in/aby-bijo-102359282) ·
 [Buy Me a Coffee](https://www.buymeacoffee.com/AbyBijo).
+
+## License
+
+Keel is open source under the [Apache License 2.0](LICENSE).
