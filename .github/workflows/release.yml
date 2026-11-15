@@ -1,0 +1,68 @@
+name: Keel Release
+
+# Creates a GitHub Release from the latest successful Keel Android CI run.
+# Run manually from Actions -> Keel Release -> Run workflow, with the tag
+# and title. The release gets the debug APK and the three per-ABI release
+# APKs from that run, plus the notes in RELEASE_NOTES.md. GitHub attaches
+# the source code archives automatically.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.2.0)'
+        required: true
+        default: 'v1.2.0'
+      title:
+        description: 'Release title'
+        required: true
+        default: 'Keel 1.2.0 — First public release'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Find latest successful build run
+        id: find
+        run: |
+          RUN_ID=$(gh run list --workflow android.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "No successful Keel Android CI run found on main."
+            exit 1
+          fi
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "Using build run $RUN_ID"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download debug APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: keel-debug-apk
+          path: apks/debug
+          run-id: ${{ steps.find.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download release APKs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: keel-release-apk
+          path: apks/release
+          run-id: ${{ steps.find.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release
+        run: |
+          ls -la apks/debug apks/release
+          gh release create "${{ inputs.tag }}" --target main --title "${{ inputs.title }}" --notes-file RELEASE_NOTES.md \
+            apks/debug/app-debug.apk \
+            apks/release/app-arm64-v8a-release.apk \
+            apks/release/app-armeabi-v7a-release.apk \
+            apks/release/app-x86_64-release.apk
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
