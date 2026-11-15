@@ -27,7 +27,7 @@ val releaseStoreFile = keystoreProperties.getProperty("storeFile")
     ?.let { rootProject.file(it) }
 
 android {
-    namespace = "com.abybijo.keel"
+    namespace = "com.keel.manager"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -49,7 +49,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.abybijo.keel"
+        applicationId = "com.keel.manager"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 26

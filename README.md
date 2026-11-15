@@ -7,7 +7,7 @@ organization with many people, tasks, teams and sub-organizations. No login,
 no server, no account, no internet permission. All data lives in a local
 SQLite database (Drift) on the phone.
 
-- Package: `com.abybijo.keel`
+- Package: `com.keel.manager`
 - Version: 1.0.0
 - Android 8+ (API 26+), portrait, phones first
 - Private repo: https://github.com/AbyBijo/Keel
