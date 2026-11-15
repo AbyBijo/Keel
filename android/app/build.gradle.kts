@@ -32,8 +32,11 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        // CI Run #12: flutter_local_notifications 19.x uses java.time
+        // (LocalDateTime) and needs Java 17 + compileSdk 35+ to compile.
+        // Java 11 was not enough even with desugaring enabled.
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
         // CI Run #11: flutter_local_notifications requires core library
         // desugaring (checkDebugAarMetadata failure). Without this the
         // debug APK cannot build.
@@ -41,7 +44,7 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
     defaultConfig {
@@ -79,7 +82,8 @@ android {
 
 dependencies {
     // Core library desugaring, required by flutter_local_notifications.
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    // 2.1.4 matches the version the plugin itself declares.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 flutter {
