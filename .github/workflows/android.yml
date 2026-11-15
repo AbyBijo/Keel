@@ -1,12 +1,10 @@
-name: Keel Android CI
-
-# Builds, analyzes and tests Keel on every push / PR to main.
-# - Debug APK is always built and uploaded as an artifact.
-# - The signed release APK is built ONLY when the four release secrets
-#   exist (ANDROID_KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS,
-#   KEY_PASSWORD). Until the user confirms signing, those secrets are
-#   unset and the release step is skipped cleanly — the job still passes.
-# - No GitHub Release is ever created (artifacts only, per project rule).
+# Keel (native) — CI
+# - Unit tests + debug APK on every push / PR to main.
+# - The debug APK is uploaded as artifact `keel-debug-apk`.
+# - Release steps run ONLY when the 4 release secrets exist. Secrets are
+#   read once at job level into env vars (never secrets.* in a step if:).
+# - NO GitHub Release is ever created.
+name: Android CI
 
 on:
   push:
@@ -18,14 +16,14 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Secrets are read ONCE here, into env vars; steps test the env vars.
     env:
-      KEEL_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      KEEL_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-      KEEL_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-      KEEL_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      # Release secrets, read once at job level.
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
     steps:
-      - name: Check out
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -34,65 +32,74 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Flutter 3.35.7
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.35.7"
-          channel: stable
-          cache: true
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Install Linux test dependency (libsqlite3.so)
+      - name: Install platform + build-tools
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y libsqlite3-dev || sudo ln -sf /lib/x86_64-linux-gnu/libsqlite3.so.0 /usr/lib/x86_64-linux-gnu/libsqlite3.so
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Install dependencies
-        run: flutter pub get
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
-      - name: Generate Drift code
-        run: dart run build_runner build --delete-conflicting-outputs
-
-      - name: Analyze (zero issues)
-        run: flutter analyze
-
-      - name: Test (logic rules + widget smoke tests)
-        run: flutter test
+      - name: Run unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
 
       - name: Build debug APK
-        run: flutter build apk --debug
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Verify debug APK signature (v2 + v3)
+        run: |
+          APK=$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)
+          echo "APK: $APK"
+          ls -lh "$APK"
+          apksigner verify --verbose --print-certs "$APK"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: keel-debug-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          retention-days: 30
 
-      - name: Prepare release keystore
-        if: env.KEEL_KEYSTORE_B64 != ''
+      # -- Release (only when the secrets exist) ---------------------------
+      - name: Check release secrets
+        id: release-check
         run: |
-          echo "$KEEL_KEYSTORE_B64" | base64 -d > android/keystore.jks
-          cat > android/key.properties <<EOF
-          storePassword=$KEEL_KEYSTORE_PASSWORD
-          keyPassword=$KEEL_KEY_PASSWORD
-          keyAlias=$KEEL_KEY_ALIAS
-          storeFile=../keystore.jks
-          EOF
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "has_release_secrets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_release_secrets=false" >> "$GITHUB_OUTPUT"
+            echo "Release secrets not set — skipping release build."
+          fi
 
-      - name: Build signed release APK
-        if: env.KEEL_KEYSTORE_B64 != ''
-        run: flutter build apk --release
+      - name: Write release keystore
+        if: steps.release-check.outputs.has_release_secrets == 'true'
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > /tmp/keel-release.keystore
+          {
+            echo "storeFile=/tmp/keel-release.keystore"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > key.properties
+
+      - name: Build release APK
+        if: steps.release-check.outputs.has_release_secrets == 'true'
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Verify release APK signature (v2 + v3)
+        if: steps.release-check.outputs.has_release_secrets == 'true'
+        run: |
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
+          echo "APK: $APK"
+          ls -lh "$APK"
+          apksigner verify --verbose --print-certs "$APK"
 
       - name: Upload release APK
-        if: env.KEEL_KEYSTORE_B64 != ''
+        if: steps.release-check.outputs.has_release_secrets == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: keel-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
-          retention-days: 30
-
-      - name: Note when release is skipped
-        if: env.KEEL_KEYSTORE_B64 == ''
-        run: echo "Release secrets are not set — release APK skipped (debug APK above is the deliverable)."
