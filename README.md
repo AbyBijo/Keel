@@ -6,6 +6,8 @@
 
 A calm, offline task manager for anyone who leads more than one team.
 
+**Website:** https://abybijo.github.io/Keel/
+
 - Teams with one leader and one main task
 - Tasks with sub-tasks, due dates and priorities
 - People with phones, emails, photos and notes
@@ -100,6 +102,8 @@ policy.
 ## Download
 
 Get the latest release here: [Keel releases](https://github.com/AbyBijo/Keel/releases/latest)
+
+See the website for screenshots and the full story: https://abybijo.github.io/Keel/
 
 - **Most modern Android phones:** [app-arm64-v8a-release.apk](https://github.com/AbyBijo/Keel/releases/latest/download/app-arm64-v8a-release.apk)
 - **Older 32-bit phones:** [app-armeabi-v7a-release.apk](https://github.com/AbyBijo/Keel/releases/latest/download/app-armeabi-v7a-release.apk)
