@@ -23,7 +23,9 @@ dependencies:
   # Settings persistence
   shared_preferences: 2.5.3
   # Local notifications (daily digest only, fully offline)
-  flutter_local_notifications: 19.4.2
+  # Pinned below 19.5.0: CI resolved 19.5.0 despite pubspec.lock pinning
+  # 19.4.2, and 19.5.0 fails to compile java.time.LocalDateTime (Run #12).
+  flutter_local_notifications: '>=19.4.2 <19.5.0'
   timezone: 0.10.1
   # Files: backup/restore via Storage Access Framework, photos
   file_picker: 10.3.2
