@@ -1,0 +1,98 @@
+name: Keel Android CI
+
+# Builds, analyzes and tests Keel on every push / PR to main.
+# - Debug APK is always built and uploaded as an artifact.
+# - The signed release APK is built ONLY when the four release secrets
+#   exist (ANDROID_KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS,
+#   KEY_PASSWORD). Until the user confirms signing, those secrets are
+#   unset and the release step is skipped cleanly — the job still passes.
+# - No GitHub Release is ever created (artifacts only, per project rule).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Secrets are read ONCE here, into env vars; steps test the env vars.
+    env:
+      KEEL_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KEEL_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEEL_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEEL_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter 3.35.7
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.35.7"
+          channel: stable
+          cache: true
+
+      - name: Install Linux test dependency (libsqlite3.so)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libsqlite3-dev || sudo ln -sf /lib/x86_64-linux-gnu/libsqlite3.so.0 /usr/lib/x86_64-linux-gnu/libsqlite3.so
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate Drift code
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Analyze (zero issues)
+        run: flutter analyze
+
+      - name: Test (logic rules + widget smoke tests)
+        run: flutter test
+
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: keel-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Prepare release keystore
+        if: env.KEEL_KEYSTORE_B64 != ''
+        run: |
+          echo "$KEEL_KEYSTORE_B64" | base64 -d > android/keystore.jks
+          cat > android/key.properties <<EOF
+          storePassword=$KEEL_KEYSTORE_PASSWORD
+          keyPassword=$KEEL_KEY_PASSWORD
+          keyAlias=$KEEL_KEY_ALIAS
+          storeFile=../keystore.jks
+          EOF
+
+      - name: Build signed release APK
+        if: env.KEEL_KEYSTORE_B64 != ''
+        run: flutter build apk --release
+
+      - name: Upload release APK
+        if: env.KEEL_KEYSTORE_B64 != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: keel-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Note when release is skipped
+        if: env.KEEL_KEYSTORE_B64 == ''
+        run: echo "Release secrets are not set — release APK skipped (debug APK above is the deliverable)."
