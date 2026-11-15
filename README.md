@@ -1,15 +1,19 @@
-# Keel — One manager. Many teams. Everything stays on your phone.
+<p align="center">
+  <img src="docs/keel-readme-banner-1600x400.png" alt="Keel: one manager, many teams, everything stays on your phone" />
+</p>
 
-Keel is an offline organization manager for Android, built for one
-person running an organization with many people, teams and tasks.
+# Keel
 
-No account. No login. No server. No internet. No ads. No tracking.
-Everything you enter lives on your phone — and nowhere else.
+A calm, offline task manager for anyone who leads more than one team.
 
-- Version: 1.2.0
-- Package: `com.keel.manager`
-- Android 8+ (API 26+), portrait, phones first
-- https://github.com/AbyBijo/Keel
+- Teams with one leader and one main task
+- Tasks with sub-tasks, due dates and priorities
+- People with phones, emails, photos and notes
+- Multiple organizations, all on-device
+- No account, no server, no internet
+- Backup and restore from a file you control
+
+<img src="docs/keel-readme-screens-1600x900.png" alt="Keel screens: Home, Tasks, Teams, People and dark mode" />
 
 ## Who it's for
 
