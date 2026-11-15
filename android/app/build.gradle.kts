@@ -34,6 +34,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // CI Run #11: flutter_local_notifications requires core library
+        // desugaring (checkDebugAarMetadata failure). Without this the
+        // debug APK cannot build.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -71,6 +75,11 @@ android {
             }
         }
     }
+}
+
+dependencies {
+    // Core library desugaring, required by flutter_local_notifications.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
 
 flutter {
