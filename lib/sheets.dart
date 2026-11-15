@@ -1,9 +1,11 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'db.dart';
 import 'providers.dart';
+import 'repo.dart';
 import 'services.dart';
 import 'task_card.dart';
 import 'theme.dart';
@@ -1626,6 +1628,617 @@ class _TeamOverviewSheet extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
+// Task overview sheet — tap a task tile (except its arrow).
+// Read-only summary + quick actions. The arrow opens the full task page.
+// ---------------------------------------------------------------------------
+
+Future<void> showTaskOverviewSheet(
+  BuildContext context, {
+  required Task task,
+  required String orgId,
+  required ValueChanged<Team> onOpenTeamPage,
+}) {
+  return showKeelDialogSheet<void>(
+    context,
+    child: _TaskOverviewSheet(
+      taskId: task.id,
+      orgId: orgId,
+      onOpenTeamPage: onOpenTeamPage,
+    ),
+  );
+}
+
+class _TaskOverviewSheet extends ConsumerWidget {
+  final String taskId;
+  final String orgId;
+  final ValueChanged<Team> onOpenTeamPage;
+  const _TaskOverviewSheet({
+    required this.taskId,
+    required this.orgId,
+    required this.onOpenTeamPage,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final task = ref.watch(taskProvider(taskId)).value;
+    if (task == null) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 18),
+        child: Text('This task no longer exists.'),
+      );
+    }
+    final repo = ref.read(repositoryProvider);
+    final teams = ref.watch(teamsProvider(orgId)).value ?? const [];
+    final team = teams.where((t) => t.id == task.teamId).firstOrNull;
+    final assigneesAsync = ref.watch(taskAssigneesProvider(task.id));
+    final subsAsync = ref.watch(subTodosProvider(task.id));
+    final overdue = isOverdue(task);
+    final dueSoon = isDueSoon(task);
+    final dueText = task.dueDate == null
+        ? 'No due date'
+        : '${dueLabel(task.dueDate, isDone: task.isDone)} · '
+            '${task.dueDate!.day}/${task.dueDate!.month}/${task.dueDate!.year}';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              KeelCheckbox(
+                value: task.isDone,
+                semanticLabel: task.isDone
+                    ? 'Mark "${task.title}" not done'
+                    : 'Mark "${task.title}" done',
+                onChanged: (done) => repo.setTaskDone(task.id, done),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  task.title,
+                  style: TextStyle(
+                    fontFamily: 'Nunito',
+                    fontWeight: FontWeight.w800,
+                    fontSize: 22,
+                    height: 1.1,
+                    color: context.ink,
+                    decoration:
+                        task.isDone ? TextDecoration.lineThrough : null,
+                    decorationColor: context.muted,
+                  ),
+                ),
+              ),
+              if (task.priority != 'none') ...[
+                const SizedBox(width: 8),
+                _OverviewPriorityTag(priority: task.priority),
+              ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Icon(
+                Icons.event_outlined,
+                size: 18,
+                color: overdue
+                    ? KeelTokens.overdue
+                    : dueSoon
+                        ? KeelTokens.colorFromHex('#B7791F')
+                        : context.muted,
+              ),
+              const SizedBox(width: 6),
+              // Flexible: after Complete the row also carries the
+              // "Done <date>" text, which together with the due text
+              // overflowed a 390px screen (caught by widget test).
+              Flexible(
+                child: Text(
+                  dueText,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: overdue ? FontWeight.w700 : FontWeight.w400,
+                    color: overdue
+                        ? KeelTokens.overdue
+                        : dueSoon
+                            ? KeelTokens.colorFromHex('#B7791F')
+                            : context.muted,
+                  ),
+                ),
+              ),
+              if (task.completedAt != null) ...[
+                const SizedBox(width: 12),
+                Text(
+                  'Done ${task.completedAt!.day}/${task.completedAt!.month}/${task.completedAt!.year}',
+                  style: TextStyle(color: context.muted, fontSize: 13),
+                ),
+              ],
+            ],
+          ),
+          if (task.notes.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              task.notes,
+              style: TextStyle(color: context.muted, fontSize: 14, height: 1.4),
+            ),
+          ],
+          subsAsync.when(
+            data: (subs) {
+              if (subs.isEmpty) return const SizedBox.shrink();
+              final doneCount = subs.where((s) => s.isDone).length;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 14),
+                  Text(
+                    '$doneCount of ${subs.length} sub-tasks done',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: context.muted,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  ProgressBar(
+                    value: doneCount / subs.length,
+                    color: context.accent,
+                  ),
+                  const SizedBox(height: 6),
+                  for (final s in subs)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        children: [
+                          KeelCheckbox(
+                            value: s.isDone,
+                            size: 20,
+                            onChanged: (done) =>
+                                repo.toggleSubTodo(s.id, done),
+                          ),
+                          Expanded(
+                            child: Text(
+                              s.title,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color:
+                                    s.isDone ? context.muted : context.ink,
+                                decoration: s.isDone
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              );
+            },
+            loading: () => const SizedBox.shrink(),
+            error: (_, _) => const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Assigned to',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: context.muted,
+            ),
+          ),
+          const SizedBox(height: 6),
+          assigneesAsync.when(
+            data: (people) => people.isEmpty
+                ? Text(
+                    'Nobody assigned yet.',
+                    style: TextStyle(color: context.muted, fontSize: 13),
+                  )
+                : Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final p in people)
+                        KeelChip(label: p.name, color: context.accent),
+                    ],
+                  ),
+            loading: () => const SizedBox.shrink(),
+            error: (_, _) => const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 14),
+          if (team != null)
+            KeelButton(
+              label: 'Team: ${team.name}',
+              background: KeelTokens.colorFromHex(team.colorHex),
+              foreground: Colors.white,
+              icon: Icons.group_outlined,
+              onPressed: () {
+                Navigator.of(context).pop();
+                onOpenTeamPage(team);
+              },
+            )
+          else
+            Text(
+              'No team assigned.',
+              style: TextStyle(color: context.muted, fontSize: 13),
+            ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _SheetAction(
+                  icon: task.isDone
+                      ? Icons.replay_outlined
+                      : Icons.check_circle_outline,
+                  label: task.isDone ? 'Reopen' : 'Complete',
+                  color: KeelTokens.success,
+                  onTap: () => repo.setTaskDone(task.id, !task.isDone),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _SheetAction(
+                  icon: Icons.edit_outlined,
+                  label: 'Edit',
+                  color: context.ink,
+                  onTap: () => showTaskDetailSheet(
+                    context,
+                    task: task,
+                    orgId: orgId,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _SheetAction(
+                  icon: Icons.delete_outline,
+                  label: 'Delete',
+                  color: KeelTokens.overdue,
+                  onTap: () async {
+                    final snap = await repo.deleteTask(task.id);
+                    if (!context.mounted) return;
+                    // Snackbar first: this sheet's context is unmounted
+                    // after the pop below, so it could not show one.
+                    showUndoSnack(
+                      context,
+                      label: 'Task deleted',
+                      onUndo: () => repo.restoreSnapshot(snap),
+                    );
+                    if (context.mounted) Navigator.of(context).pop();
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OverviewPriorityTag extends StatelessWidget {
+  final String priority;
+  const _OverviewPriorityTag({required this.priority});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (priority) {
+      'high' => ('High', KeelTokens.overdue),
+      'medium' => ('Medium', KeelTokens.colorFromHex('#B7791F')),
+      'low' => ('Low', KeelTokens.success),
+      _ => ('', context.muted),
+    };
+    if (label.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+/// One quick-action button inside an overview sheet: tinted tile,
+/// icon + label, 48dp tall, radius 18 (kit buttons).
+class _SheetAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  const _SheetAction({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: KeelTokens.tint14(color, context.card),
+            borderRadius: BorderRadius.circular(KeelTokens.radiusButton),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 19, color: color),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Person overview sheet — tap a person tile (except its arrow).
+// Avatar + name/role/teams on the left; Call on the right with Message
+// (WhatsApp) directly below it. The arrow opens the full person page.
+// ---------------------------------------------------------------------------
+
+/// WhatsApp deep link for a phone number: digits only, or null when the
+/// number has no digits at all. The number is validated here so no
+/// user-typed text can reach the URL unchecked.
+Uri? whatsappUriFor(String number) {
+  final digits = number.replaceAll(RegExp(r'[^0-9+]'), '');
+  // wa.me wants digits only (no leading +).
+  final clean = digits.replaceAll('+', '');
+  if (clean.isEmpty) return null;
+  return Uri.parse('https://wa.me/$clean');
+}
+
+Future<void> showPersonOverviewSheet(
+  BuildContext context, {
+  required Person person,
+  required String orgId,
+}) {
+  return showKeelDialogSheet<void>(
+    context,
+    child: _PersonOverviewSheet(person: person, orgId: orgId),
+  );
+}
+
+class _PersonOverviewSheet extends ConsumerWidget {
+  final Person person;
+  final String orgId;
+  const _PersonOverviewSheet({required this.person, required this.orgId});
+
+  Future<void> _launch(
+    BuildContext context,
+    Uri uri,
+    String label,
+  ) async {
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (context.mounted) {
+      showKeelSnack(context, 'Could not open $label.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final teams = ref.watch(personTeamsProvider(person.id)).value ?? const [];
+    final ringColor = firstTeamColor(teams);
+    final repo = ref.read(repositoryProvider);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      child: FutureBuilder<List<PersonPhone>>(
+        future: repo.getPhones(person.id),
+        builder: (context, snap) {
+          final phones = snap.data ?? const [];
+          final firstPhone = phones.isEmpty ? null : phones.first;
+          final waUri = firstPhone == null
+              ? null
+              : whatsappUriFor(firstPhone.number);
+          final hasPhone = firstPhone != null;
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  PersonAvatar(
+                    person: person,
+                    ringColor: ringColor,
+                    size: 64,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          person.name,
+                          style: TextStyle(
+                            fontFamily: 'Nunito',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 20,
+                            height: 1.1,
+                            color: context.ink,
+                          ),
+                        ),
+                        if (person.roleTitle.isNotEmpty)
+                          Text(
+                            person.roleTitle,
+                            style:
+                                TextStyle(color: context.muted, fontSize: 13),
+                          ),
+                        if (hasPhone)
+                          Text(
+                            firstPhone.number,
+                            style:
+                                TextStyle(color: context.muted, fontSize: 13),
+                          ),
+                        const SizedBox(height: 6),
+                        if (teams.isEmpty)
+                          Text(
+                            'No team',
+                            style:
+                                TextStyle(color: context.muted, fontSize: 12),
+                          )
+                        else
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              for (final t in teams)
+                                KeelChip(
+                                  label: t.name,
+                                  color: KeelTokens.colorFromHex(t.colorHex),
+                                ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Right-hand action column: Call on top, Message
+                  // (WhatsApp) directly below it — the most reachable
+                  // spot for the right thumb.
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _ContactActionButton(
+                        icon: Icons.phone_outlined,
+                        label: 'Call',
+                        color: context.accent,
+                        enabled: hasPhone,
+                        onTap: hasPhone
+                            ? () => _launch(
+                                  context,
+                                  Uri.parse('tel:${firstPhone.number}'),
+                                  'the dialler',
+                                )
+                            : null,
+                      ),
+                      const SizedBox(height: 8),
+                      _ContactActionButton(
+                        icon: Icons.message_outlined,
+                        label: 'Message',
+                        color: KeelTokens.success,
+                        enabled: waUri != null,
+                        onTap: waUri == null
+                            ? null
+                            : () => _launch(context, waUri, 'WhatsApp'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (!hasPhone) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'No phone number — add one on the full person page.',
+                  style: TextStyle(color: context.muted, fontSize: 13),
+                ),
+              ] else if (phones.length > 1) ...[
+                const SizedBox(height: 10),
+                Text(
+                  '+${phones.length - 1} more number${phones.length - 1 == 1 ? '' : 's'} on the full person page.',
+                  style: TextStyle(color: context.muted, fontSize: 13),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// One stacked Call/Message button in the person overview sheet:
+/// solid colour, white icon + label, 48dp tall.
+class _ContactActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final bool enabled;
+  final VoidCallback? onTap;
+  const _ContactActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: enabled ? 1 : 0.45,
+      child: Semantics(
+        button: true,
+        label: enabled ? label : '$label (unavailable)',
+        child: GestureDetector(
+          onTap: enabled ? onTap : null,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            width: 92,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 19, color: Colors.white),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Organization switcher sheet — tap the Home header.
 // ---------------------------------------------------------------------------
 
@@ -1723,6 +2336,7 @@ class _OrgSwitcherSheet extends ConsumerWidget {
                         await settings.setActiveOrg(org.id);
                         if (context.mounted) Navigator.of(context).pop();
                       }
+                      name.dispose();
                     },
                     icon: const Icon(Icons.add, size: 20),
                     label: const Text('Add organization'),

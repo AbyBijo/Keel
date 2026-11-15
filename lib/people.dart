@@ -10,6 +10,8 @@ import 'repo.dart';
 import 'services.dart';
 import 'sheets.dart';
 import 'task_card.dart';
+import 'task_page.dart';
+import 'teams.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -63,137 +65,132 @@ class _PeopleScreenState extends ConsumerState<PeopleScreen> {
         if (orgId == null) return const SizedBox.shrink();
         final peopleAsync = ref.watch(peopleProvider(orgId));
         final people = peopleAsync.value ?? const [];
-        return ListView(
+        final filteredAsync =
+            ref.watch(filteredPeopleProvider((orgId: orgId, query: _query)));
+        final shown = filteredAsync.value ?? const [];
+        final filtering = filteredAsync is AsyncLoading;
+
+        // Lazy list: 200+ people build only their on-screen rows.
+        return CustomScrollView(
           controller: scrollController,
-          padding: const EdgeInsets.fromLTRB(18, 54, 18, 130),
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${people.length} contacts',
-                        style: TextStyle(color: context.muted, fontSize: 13),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(18, 54, 18, 0),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${people.length} contacts',
+                                style: TextStyle(
+                                  color: context.muted,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'People',
+                                style: Theme.of(context).textTheme.displayLarge,
+                              ),
+                            ],
+                          ),
+                        ),
+                        KeelAddIconButton(
+                          onPressed: () =>
+                              showNewPersonSheet(context, orgId: orgId),
+                          tooltip: 'Add a person',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _search,
+                      onChanged: (v) => setState(() => _query = v),
+                      decoration: InputDecoration(
+                        hintText: 'Search people',
+                        prefixIcon: Icon(
+                          Icons.search,
+                          color: context.muted,
+                          size: 19,
+                        ),
+                        suffixIcon: _query.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                onPressed: () {
+                                  _search.clear();
+                                  setState(() => _query = '');
+                                },
+                                tooltip: 'Clear search',
+                              ),
                       ),
-                      const SizedBox(height: 4),
-                      Text('People', style: Theme.of(context).textTheme.displayLarge),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
                 ),
-                KeelAddIconButton(
-                  onPressed: () => showNewPersonSheet(context, orgId: orgId),
-                  tooltip: 'Add a person',
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _search,
-              onChanged: (v) => setState(() => _query = v),
-              decoration: InputDecoration(
-                hintText: 'Search people',
-                prefixIcon: Icon(Icons.search, color: context.muted, size: 19),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () {
-                          _search.clear();
-                          setState(() => _query = '');
-                        },
-                        tooltip: 'Clear search',
-                      ),
               ),
             ),
-            const SizedBox(height: 14),
             if (people.isEmpty)
-              EmptyState(
-                icon: Icons.person_add_outlined,
-                title: 'No people yet',
-                body: 'Add the people you manage — their teams, tasks and contact details live here.',
-                actionLabel: 'Add a person',
-                onAction: () => showNewPersonSheet(context, orgId: orgId),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 130),
+                sliver: SliverToBoxAdapter(
+                  child: EmptyState(
+                    icon: Icons.person_add_outlined,
+                    title: 'No people yet',
+                    body:
+                        'Add the people you manage — their teams, tasks and contact details live here.',
+                    actionLabel: 'Add a person',
+                    onAction: () => showNewPersonSheet(context, orgId: orgId),
+                  ),
+                ),
+              )
+            else if (filtering)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(top: 32),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              )
+            else if (shown.isEmpty)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 130),
+                sliver: SliverToBoxAdapter(
+                  child: EmptyState(
+                    icon: Icons.person_search_outlined,
+                    title: 'No matches',
+                    body:
+                        'No one matches "$_query". Try a name, role, phone, email or team.',
+                    actionLabel: 'Add a person',
+                    onAction: () => showNewPersonSheet(context, orgId: orgId),
+                  ),
+                ),
               )
             else
-              _PeopleList(orgId: orgId, people: people, query: _query),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 130),
+                sliver: SliverList.builder(
+                  itemCount: shown.length,
+                  itemBuilder: (context, i) {
+                    final p = shown[i];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _PersonRow(person: p, orgId: orgId),
+                    );
+                  },
+                ),
+              ),
           ],
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (_, _) => const Center(child: Text('Could not load people.')),
     );
-  }
-}
-
-class _PeopleList extends ConsumerWidget {
-  final String orgId;
-  final List<Person> people;
-  final String query;
-  const _PeopleList({required this.orgId, required this.people, required this.query});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return FutureBuilder<List<Person>>(
-      future: _filter(ref, orgId, people, query),
-      builder: (context, snap) {
-        if (!snap.hasData) {
-          return const Padding(
-            padding: EdgeInsets.only(top: 32),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final shown = snap.data!;
-        if (shown.isEmpty) {
-          return EmptyState(
-            icon: Icons.person_search_outlined,
-            title: 'No matches',
-            body: 'No one matches "$query". Try a name, role, phone, email or team.',
-            actionLabel: 'Add a person',
-            onAction: () => showNewPersonSheet(context, orgId: orgId),
-          );
-        }
-        return Column(
-          children: [
-            for (final p in shown)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _PersonRow(person: p, orgId: orgId),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<List<Person>> _filter(
-    WidgetRef ref,
-    String orgId,
-    List<Person> people,
-    String query,
-  ) async {
-    final q = query.trim().toLowerCase();
-    if (q.isEmpty) return people;
-    final repo = ref.read(repositoryProvider);
-    final out = <Person>[];
-    for (final p in people) {
-      if (p.name.toLowerCase().contains(q) ||
-          p.roleTitle.toLowerCase().contains(q)) {
-        out.add(p);
-        continue;
-      }
-      final phones = await repo.getPhones(p.id);
-      final emails = await repo.getEmails(p.id);
-      final teams = await repo.getTeamsForPerson(p.id);
-      final hay = [
-        ...phones.map((e) => e.number),
-        ...emails.map((e) => e.address),
-        ...teams.map((e) => e.name),
-      ].join(' ').toLowerCase();
-      if (hay.contains(q)) out.add(p);
-    }
-    return out;
   }
 }
 
@@ -206,7 +203,7 @@ class _PersonRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final teams = ref.watch(personTeamsProvider(person.id)).value ?? const [];
     return KeelCard(
-      onTap: () => openPersonPage(context, person: person, orgId: orgId),
+      onTap: () => showPersonOverviewSheet(context, person: person, orgId: orgId),
       semanticLabel: 'Person: ${person.name}',
       child: Row(
         children: [
@@ -237,7 +234,29 @@ class _PersonRow extends ConsumerWidget {
               ],
             ),
           ),
-          Icon(Icons.chevron_right, color: context.muted),
+          // Arrow: opens the full person page. The card tap (handled by
+          // KeelCard) opens the overview sheet instead.
+          Semantics(
+            button: true,
+            label: 'Open full profile for ${person.name}',
+            child: GestureDetector(
+              onTap: () => openPersonPage(context, person: person, orgId: orgId),
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: KeelTokens.tint14(context.accent, context.card),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  Icons.chevron_right,
+                  color: context.accent,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -562,7 +581,18 @@ class _PersonPageState extends ConsumerState<PersonPage> {
                 child: TaskCard(
                   task: t,
                   team: allTeams.where((x) => x.id == t.teamId).firstOrNull,
-                  onTap: () => showTaskDetailSheet(context, task: t, orgId: widget.orgId),
+                  onTap: () => showTaskOverviewSheet(
+                    context,
+                    task: t,
+                    orgId: widget.orgId,
+                    onOpenTeamPage: (team) => openTeamPage(
+                      context,
+                      team: team,
+                      orgId: widget.orgId,
+                    ),
+                  ),
+                  onOpenPage: () =>
+                      openTaskPage(context, task: t, orgId: widget.orgId),
                 ),
               ),
           if (person.notes.isNotEmpty) ...[
@@ -659,12 +689,20 @@ class _PersonPageState extends ConsumerState<PersonPage> {
         ],
       ),
     );
-    if (saved != true || value.text.trim().isEmpty) return;
+    if (saved != true || value.text.trim().isEmpty) {
+      value.dispose();
+      label.dispose();
+      return;
+    }
+    final number = value.text;
+    final lbl = label.text.trim();
+    value.dispose();
+    label.dispose();
     final repo = ref.read(repositoryProvider);
     if (isPhone) {
-      await repo.addPhone(widget.personId, label.text.trim(), value.text);
+      await repo.addPhone(widget.personId, lbl, number);
     } else {
-      await repo.addEmail(widget.personId, label.text.trim(), value.text);
+      await repo.addEmail(widget.personId, lbl, number);
     }
   }
 
@@ -743,6 +781,9 @@ class _PersonPageState extends ConsumerState<PersonPage> {
             notes: notes.text,
           );
     }
+    name.dispose();
+    role.dispose();
+    notes.dispose();
   }
 
   Future<void> _deletePerson(

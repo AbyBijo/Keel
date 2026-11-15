@@ -8,6 +8,7 @@ import 'repo.dart';
 import 'services.dart';
 import 'sheets.dart';
 import 'task_card.dart';
+import 'task_page.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -49,46 +50,77 @@ class TeamsScreen extends ConsumerWidget {
         if (orgId == null) return const SizedBox.shrink();
         final teamsAsync = ref.watch(teamsProvider(orgId));
         final teams = teamsAsync.value ?? const [];
-        return ListView(
+        // Lazy list: team cards build only their on-screen rows.
+        return CustomScrollView(
           controller: scrollController,
-          padding: const EdgeInsets.fromLTRB(18, 54, 18, 130),
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${teams.length} teams · tap for overview',
-                        style: TextStyle(color: context.muted, fontSize: 13),
-                      ),
-                      const SizedBox(height: 4),
-                      Text('Teams', style: Theme.of(context).textTheme.displayLarge),
-                    ],
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(18, 54, 18, 0),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${teams.length} teams · tap for overview',
+                                style: TextStyle(
+                                  color: context.muted,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Teams',
+                                style: Theme.of(context).textTheme.displayLarge,
+                              ),
+                            ],
+                          ),
+                        ),
+                        KeelAddIconButton(
+                          onPressed: () =>
+                              showNewTeamSheet(context, orgId: orgId),
+                          tooltip: 'Add a team',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ),
+            if (teams.isEmpty)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 130),
+                sliver: SliverToBoxAdapter(
+                  child: EmptyState(
+                    icon: Icons.group_outlined,
+                    title: 'No teams yet',
+                    body:
+                        'Create your first team to group people and tasks together.',
+                    actionLabel: 'Create a team',
+                    onAction: () => showNewTeamSheet(context, orgId: orgId),
                   ),
                 ),
-                KeelAddIconButton(
-                  onPressed: () => showNewTeamSheet(context, orgId: orgId),
-                  tooltip: 'Add a team',
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (teams.isEmpty)
-              EmptyState(
-                icon: Icons.group_outlined,
-                title: 'No teams yet',
-                body: 'Create your first team to group people and tasks together.',
-                actionLabel: 'Create a team',
-                onAction: () => showNewTeamSheet(context, orgId: orgId),
               )
             else
-              for (final team in teams)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _TeamCard(team: team, orgId: orgId),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 130),
+                sliver: SliverList.builder(
+                  itemCount: teams.length,
+                  itemBuilder: (context, i) {
+                    final team = teams[i];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _TeamCard(team: team, orgId: orgId),
+                    );
+                  },
                 ),
+              ),
           ],
         );
       },
@@ -468,7 +500,18 @@ class TeamPage extends ConsumerWidget {
                           TaskCard(
                             task: t,
                             team: team,
-                            onTap: () => showTaskDetailSheet(context, task: t, orgId: orgId),
+                            onTap: () => showTaskOverviewSheet(
+                              context,
+                              task: t,
+                              orgId: orgId,
+                              onOpenTeamPage: (team) => openTeamPage(
+                                context,
+                                team: team,
+                                orgId: orgId,
+                              ),
+                            ),
+                            onOpenPage: () =>
+                                openTaskPage(context, task: t, orgId: orgId),
                           ),
                           Positioned(
                             right: 12,
@@ -611,6 +654,7 @@ class TeamPage extends ConsumerWidget {
             colorHex: colorHex,
           );
     }
+    name.dispose();
   }
 
   Future<void> _deleteTeam(

@@ -149,8 +149,8 @@ class BackupService {
       throw const FormatException('cancelled');
     }
     final zipFile = File(result.files.single.path!);
-    if (await zipFile.length() > 200 * 1024 * 1024) {
-      throw const FormatException('Backup file is too large (over 200 MB).');
+    if (await zipFile.length() > 100 * 1024 * 1024) {
+      throw const FormatException('Backup file is too large (over 100 MB).');
     }
     final bytes = await zipFile.readAsBytes();
     Archive archive;
@@ -158,6 +158,29 @@ class BackupService {
       archive = ZipDecoder().decodeBytes(bytes);
     } catch (_) {
       throw const FormatException('That file is not a valid Keel backup zip.');
+    }
+    // Zip-slip / zip-bomb guards, checked BEFORE anything is written:
+    // entries are never extracted by name (photos use basename only,
+    // see below), and a hostile file cannot smuggle in thousands of
+    // entries or gigabytes of expanded data past these caps.
+    if (archive.files.length > 5000) {
+      throw const FormatException(
+        'Backup has too many files to restore safely.',
+      );
+    }
+    var totalUncompressed = 0;
+    for (final f in archive.files) {
+      if (f.size > 25 * 1024 * 1024) {
+        throw const FormatException(
+          'Backup contains a file that is too large to restore safely.',
+        );
+      }
+      totalUncompressed += f.size;
+      if (totalUncompressed > 100 * 1024 * 1024) {
+        throw const FormatException(
+          'Backup is too large to restore safely.',
+        );
+      }
     }
     final jsonFile = archive.files.where((f) => f.name == 'keel-backup.json');
     if (jsonFile.isEmpty) {

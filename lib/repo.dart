@@ -448,35 +448,35 @@ class KeelRepository {
         .go();
   }
 
+  /// One JOIN, not one query per member (N+1): a 200-person team used
+  /// to fire 200 getPerson queries every time it rendered.
   Future<List<Person>> getTeamMembers(String teamId) async {
-    final rows =
-        await (db.select(db.teamMembers)
-              ..where((t) => t.teamId.equals(teamId)))
-            .get();
-    final people = <Person>[];
-    for (final r in rows) {
-      final p = await getPerson(r.personId);
-      if (p != null) people.add(p);
-    }
-    people.sort((a, b) => a.name.compareTo(b.name));
-    return people;
+    final q = db.select(db.people).join([
+      innerJoin(
+        db.teamMembers,
+        db.teamMembers.personId.equalsExp(db.people.id),
+      ),
+    ])
+      ..where(db.teamMembers.teamId.equals(teamId))
+      ..orderBy([OrderingTerm(expression: db.people.name)]);
+    final rows = await q.get();
+    return rows.map((r) => r.readTable(db.people)).toList();
   }
 
   Stream<List<TeamMember>> watchTeamMembers(String teamId) =>
       (db.select(db.teamMembers)..where((t) => t.teamId.equals(teamId)))
           .watch();
 
+  /// One JOIN, not one query per team (N+1).
   Future<List<Team>> getTeamsForPerson(String personId) async {
-    final rows =
-        await (db.select(db.teamMembers)
-              ..where((t) => t.personId.equals(personId)))
-            .get();
-    final teams = <Team>[];
-    for (final r in rows) {
-      final t = await getTeam(r.teamId);
-      if (t != null) teams.add(t);
-    }
-    return teams;
+    final q = db.select(db.teams).join([
+      innerJoin(
+        db.teamMembers,
+        db.teamMembers.teamId.equalsExp(db.teams.id),
+      ),
+    ])..where(db.teamMembers.personId.equals(personId));
+    final rows = await q.get();
+    return rows.map((r) => r.readTable(db.teams)).toList();
   }
 
   Stream<List<Team>> watchTeamsForPerson(String personId) {
@@ -648,33 +648,35 @@ class KeelRepository {
             ))
           .go();
 
+  /// One JOIN, not one query per assignee (N+1).
   Future<List<Person>> getTaskAssignees(String taskId) async {
-    final rows =
-        await (db.select(db.taskAssignees)
-              ..where((t) => t.taskId.equals(taskId)))
-            .get();
-    final people = <Person>[];
-    for (final r in rows) {
-      final p = await getPerson(r.personId);
-      if (p != null) people.add(p);
-    }
-    return people;
+    final q = db.select(db.people).join([
+      innerJoin(
+        db.taskAssignees,
+        db.taskAssignees.personId.equalsExp(db.people.id),
+      ),
+    ])
+      ..where(db.taskAssignees.taskId.equals(taskId))
+      ..orderBy([OrderingTerm(expression: db.people.name)]);
+    final rows = await q.get();
+    return rows.map((r) => r.readTable(db.people)).toList();
   }
 
   Stream<List<TaskAssignee>> watchTaskAssignees(String taskId) =>
       (db.select(db.taskAssignees)..where((t) => t.taskId.equals(taskId)))
           .watch();
 
+  /// One JOIN, not one query per task (N+1). Undated tasks sort last,
+  /// as before.
   Future<List<Task>> getTasksForPerson(String personId) async {
-    final rows =
-        await (db.select(db.taskAssignees)
-              ..where((t) => t.personId.equals(personId)))
-            .get();
-    final tasks = <Task>[];
-    for (final r in rows) {
-      final t = await getTask(r.taskId);
-      if (t != null) tasks.add(t);
-    }
+    final q = db.select(db.tasks).join([
+      innerJoin(
+        db.taskAssignees,
+        db.taskAssignees.taskId.equalsExp(db.tasks.id),
+      ),
+    ])..where(db.taskAssignees.personId.equals(personId));
+    final rows = await q.get();
+    final tasks = rows.map((r) => r.readTable(db.tasks)).toList();
     tasks.sort((a, b) {
       final da = a.dueDate, dbb = b.dueDate;
       if (da == null && dbb == null) return 0;
@@ -865,31 +867,52 @@ class KeelRepository {
   // -- search & stats ---------------------------------------------------------
 
   /// Global search on Home: tasks, people, teams in the active org.
+  /// One bulk fetch per table — the old version ran 3 queries per
+  /// person (phones, emails, teams) on every keystroke.
   Future<({List<Task> tasks, List<Person> people, List<Team> teams})>
   search(String orgId, String query) async {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return (tasks: <Task>[], people: <Person>[], teams: <Team>[]);
-    final tasks = (await getTasks(orgId))
+    final allTasks = await getTasks(orgId);
+    final allPeople = await getPeople(orgId);
+    final allTeams = await getTeams(orgId);
+    final tasks = allTasks
         .where((t) => t.title.toLowerCase().contains(q))
         .toList();
-    final people = (await getPeople(orgId))
-        .where((p) => p.name.toLowerCase().contains(q))
-        .toList();
-    final teams = (await getTeams(orgId))
+    final teams = allTeams
         .where((t) => t.name.toLowerCase().contains(q))
         .toList();
-    // People also match by role, phone, email and team name.
+
+    final phones = await (db.select(db.personPhones)).get();
+    final emails = await (db.select(db.personEmails)).get();
+    final memberships = await (db.select(db.teamMembers)).get();
+    final phonesByPerson = <String, List<String>>{};
+    for (final ph in phones) {
+      (phonesByPerson[ph.personId] ??= []).add(ph.number);
+    }
+    final emailsByPerson = <String, List<String>>{};
+    for (final em in emails) {
+      (emailsByPerson[em.personId] ??= []).add(em.address);
+    }
+    final teamNameById = {for (final t in allTeams) t.id: t.name};
+    final teamNamesByPerson = <String, List<String>>{};
+    for (final m in memberships) {
+      final name = teamNameById[m.teamId];
+      if (name != null) (teamNamesByPerson[m.personId] ??= []).add(name);
+    }
+
+    // Name matches first, then role/phone/email/team matches.
+    final people = allPeople
+        .where((p) => p.name.toLowerCase().contains(q))
+        .toList();
     final extraPeople = <Person>[];
-    for (final p in await getPeople(orgId)) {
+    for (final p in allPeople) {
       if (people.contains(p)) continue;
-      final phones = await getPhones(p.id);
-      final emails = await getEmails(p.id);
-      final pTeams = await getTeamsForPerson(p.id);
       final hay = [
         p.roleTitle,
-        ...phones.map((e) => e.number),
-        ...emails.map((e) => e.address),
-        ...pTeams.map((e) => e.name),
+        ...(phonesByPerson[p.id] ?? const []),
+        ...(emailsByPerson[p.id] ?? const []),
+        ...(teamNamesByPerson[p.id] ?? const []),
       ].join(' ').toLowerCase();
       if (hay.contains(q)) extraPeople.add(p);
     }
@@ -960,6 +983,10 @@ class KeelRepository {
 
   /// Validate the file BEFORE replacing any data (see docs/security.md).
   /// Returns null when the payload is valid, otherwise an error message.
+  /// Every list the restore reads must be present AND contain only
+  /// row maps — a foreign file with the right header but a damaged
+  /// row used to crash the restore with a raw TypeError instead of a
+  /// readable message.
   static String? validateBackup(Map<String, dynamic> data) {
     if (data['format'] != 'keel-backup') {
       return 'This file is not a Keel backup.';
@@ -970,13 +997,19 @@ class KeelRepository {
     for (final key in [
       'organizations',
       'people',
+      'phones',
+      'emails',
       'teams',
       'tasks',
       'taskAssignees',
       'teamMembers',
       'subTodos',
     ]) {
-      if (data[key] is! List) return 'Backup is missing its $key list.';
+      final v = data[key];
+      if (v is! List) return 'Backup is missing its $key list.';
+      for (final row in v) {
+        if (row is! Map) return 'Backup $key has a damaged entry.';
+      }
     }
     return null;
   }

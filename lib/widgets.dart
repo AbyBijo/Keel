@@ -141,6 +141,11 @@ class PersonAvatar extends StatelessWidget {
     final hasPhoto =
         showPhoto && person.photoPath != null && person.photoPath!.isNotEmpty;
     final bg = KeelTokens.tint(ringColor, context.card);
+    // Decode the photo at the size it is actually shown (× screen
+    // density): a 1024px photo used to be fully decoded for every
+    // 28–48px avatar in a list.
+    final cachePx =
+        (size * MediaQuery.of(context).devicePixelRatio).round();
     return Container(
       width: size,
       height: size,
@@ -156,6 +161,8 @@ class PersonAvatar extends StatelessWidget {
               fit: BoxFit.cover,
               width: size,
               height: size,
+              cacheWidth: cachePx,
+              cacheHeight: cachePx,
               errorBuilder: (_, _, _) => _initials(context, ringColor),
             )
           : _initials(context, ringColor),
@@ -467,12 +474,16 @@ class ProgressBar extends StatelessWidget {
         color: trackColor ?? context.line,
         child: Align(
           alignment: Alignment.centerLeft,
-          child: AnimatedContainer(
+          // The old version wrapped the bar in an AnimatedContainer
+          // with width: null, so the width never actually animated —
+          // the bar jumped to its new value. TweenAnimationBuilder
+          // animates the width factor from the previous value.
+          child: TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 0, end: value.clamp(0, 1)),
             duration: KeelTokens.spring,
             curve: KeelTokens.easeOut,
-            width: null,
-            child: FractionallySizedBox(
-              widthFactor: value.clamp(0, 1),
+            builder: (context, v, _) => FractionallySizedBox(
+              widthFactor: v,
               child: Container(color: color),
             ),
           ),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,7 +13,6 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
-  await NotificationService.init();
   runApp(
     ProviderScope(
       overrides: [
@@ -20,6 +21,12 @@ Future<void> main() async {
       child: const KeelApp(),
     ),
   );
+  // Notifications are not needed for the first frame: initialise after
+  // runApp so startup never waits on the timezone database or the
+  // plugin. setDailyDigest guards on _ready, so toggling reminders
+  // before init lands simply waits for it. A failure here must never
+  // crash startup — it only means the daily digest is unavailable.
+  unawaited(NotificationService.init().catchError((_) {}));
 }
 
 class KeelApp extends ConsumerWidget {

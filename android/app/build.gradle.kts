@@ -69,6 +69,17 @@ android {
 
     buildTypes {
         release {
+            // Size: R8 + resource shrinking are ON for release (the
+            // Flutter plugin enables them by default; this makes it
+            // explicit so a plugin upgrade cannot silently turn them
+            // off). Verified in the plugin source: nothing disables
+            // shrinking for --split-per-abi builds.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
             } else {

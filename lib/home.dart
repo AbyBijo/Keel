@@ -3,11 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import 'db.dart';
-import 'people.dart';
 import 'providers.dart';
 import 'repo.dart';
 import 'sheets.dart';
 import 'task_card.dart';
+import 'task_page.dart';
 import 'teams.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -390,7 +390,14 @@ class _HomeTaskCard extends ConsumerWidget {
     return TaskCard(
       task: task,
       team: team,
-      onTap: () => showTaskDetailSheet(context, task: task, orgId: task.orgId),
+      onTap: () => showTaskOverviewSheet(
+        context,
+        task: task,
+        orgId: task.orgId,
+        onOpenTeamPage: (team) =>
+            openTeamPage(context, team: team, orgId: task.orgId),
+      ),
+      onOpenPage: () => openTaskPage(context, task: task, orgId: task.orgId),
     );
   }
 }
@@ -497,25 +504,50 @@ class _SearchResults extends ConsumerWidget {
         final teams = ref.watch(teamsProvider(orgId)).value ?? const [];
         Team? teamOf(String? id) =>
             teams.where((t) => t.id == id).firstOrNull;
+        // Search results are capped at 25 per section: the Home list is
+        // a plain ListView, so an uncapped 200-person match would build
+        // every card eagerly. The tab lists are lazy SliverLists; search
+        // is for finding, not browsing.
+        const cap = 25;
+        final tasksShown = res.tasks.take(cap).toList();
+        final teamsShown = res.teams.take(cap).toList();
+        final peopleShown = res.people.take(cap).toList();
+        Widget capNote(int total) => total > cap
+            ? Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  'Showing the first $cap of $total — narrow your search to see more.',
+                  style: TextStyle(color: context.muted, fontSize: 12),
+                ),
+              )
+            : const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (res.tasks.isNotEmpty) ...[
               const SectionHeader(title: 'Tasks'),
-              for (final t in res.tasks)
+              for (final t in tasksShown)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: TaskCard(
                     task: t,
                     team: teamOf(t.teamId),
-                    onTap: () =>
-                        showTaskDetailSheet(context, task: t, orgId: orgId),
+                    onTap: () => showTaskOverviewSheet(
+                      context,
+                      task: t,
+                      orgId: orgId,
+                      onOpenTeamPage: (team) =>
+                          openTeamPage(context, team: team, orgId: orgId),
+                    ),
+                    onOpenPage: () =>
+                        openTaskPage(context, task: t, orgId: orgId),
                   ),
                 ),
+              capNote(res.tasks.length),
             ],
             if (res.teams.isNotEmpty) ...[
               const SectionHeader(title: 'Teams'),
-              for (final t in res.teams)
+              for (final t in teamsShown)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: KeelCard(
@@ -539,14 +571,19 @@ class _SearchResults extends ConsumerWidget {
                     ),
                   ),
                 ),
+              capNote(res.teams.length),
             ],
             if (res.people.isNotEmpty) ...[
               const SectionHeader(title: 'People'),
-              for (final p in res.people)
+              for (final p in peopleShown)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: KeelCard(
-                    onTap: () => openPersonPage(context, person: p, orgId: orgId),
+                    onTap: () => showPersonOverviewSheet(
+                      context,
+                      person: p,
+                      orgId: orgId,
+                    ),
                     child: Row(
                       children: [
                         PersonAvatar(person: p, ringColor: KeelTokens.noTeam, size: 40),
@@ -565,6 +602,7 @@ class _SearchResults extends ConsumerWidget {
                     ),
                   ),
                 ),
+              capNote(res.people.length),
             ],
           ],
         );

@@ -206,7 +206,10 @@ class AppDatabase extends _$AppDatabase {
     return LazyDatabase(() async {
       final dir = await getApplicationDocumentsDirectory();
       final file = File(p.join(dir.path, 'keel.sqlite'));
-      return NativeDatabase(file);
+      // Queries run on a background isolate, never on the UI thread:
+      // scrolling a 1000-task list must never wait on SQLite. (Drift's
+      // plain NativeDatabase runs on the calling — UI — isolate.)
+      return NativeDatabase.createInBackground(file);
     });
   }
 

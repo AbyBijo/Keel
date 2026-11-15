@@ -359,6 +359,8 @@ void main() {
           'version': 1,
           'organizations': [],
           'people': [],
+          'phones': [],
+          'emails': [],
           'teams': [],
           'tasks': [],
           'taskAssignees': [],
@@ -366,6 +368,21 @@ void main() {
           'subTodos': [],
         }),
         isNull,
+      );
+      // A backup missing the phones/emails lists is rejected too.
+      expect(
+        KeelRepository.validateBackup({
+          'format': 'keel-backup',
+          'version': 1,
+          'organizations': [],
+          'people': [],
+          'teams': [],
+          'tasks': [],
+          'taskAssignees': [],
+          'teamMembers': [],
+          'subTodos': [],
+        }),
+        isNotNull,
       );
     });
 

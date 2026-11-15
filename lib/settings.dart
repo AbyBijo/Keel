@@ -368,6 +368,17 @@ class SettingsScreen extends ConsumerWidget {
     } on FormatException catch (e) {
       if (e.message == 'cancelled') return;
       if (context.mounted) showKeelSnack(context, e.message);
+    } catch (_) {
+      // A foreign file can throw outside FormatException (e.g. a row
+      // with the wrong value type inside fromJson). Never crash the
+      // restore flow on it — the data is untouched, the transaction
+      // never started.
+      if (context.mounted) {
+        showKeelSnack(
+          context,
+          'That backup file is damaged and cannot be restored.',
+        );
+      }
     }
   }
 
@@ -404,6 +415,10 @@ class SettingsScreen extends ConsumerWidget {
     if (saved == true && name.text.trim().isNotEmpty) {
       await repo.saveProfile(name: name.text, role: role.text);
     }
+    // Dialog-local controllers are short-lived but still ChangeNotifiers:
+    // dispose them instead of leaking one per edit.
+    name.dispose();
+    role.dispose();
   }
 
   Future<void> _manageOrganizations(BuildContext context, WidgetRef ref) async {
@@ -652,6 +667,7 @@ class _OrgManagerSheetState extends ConsumerState<_OrgManagerSheet> {
                         if (saved == true && name.text.trim().isNotEmpty) {
                           await widget.repo.renameOrganization(org.id, name.text);
                         }
+                        name.dispose();
                       } else if (value == 'delete') {
                         if (orgs.length <= 1) {
                           if (context.mounted) {
@@ -743,6 +759,7 @@ class _OrgManagerSheetState extends ConsumerState<_OrgManagerSheet> {
                   );
                   await widget.settings.setActiveOrg(org.id);
                 }
+                name.dispose();
               },
               icon: const Icon(Icons.add, size: 20),
               label: const Text('Add organization'),

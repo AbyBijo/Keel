@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'db.dart';
 import 'providers.dart';
 import 'repo.dart';
 import 'sheets.dart';
 import 'task_card.dart';
+import 'task_page.dart';
+import 'teams.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -47,176 +48,202 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
         if (_teamFilter != null) {
           shown = shown.where((t) => t.teamId == _teamFilter).toList();
         }
+        // Person filter comes from the stream provider (not a
+        // FutureBuilder): the list below stays a lazy SliverList.
+        final personTasksAsync = _personFilter == null
+            ? null
+            : ref.watch(personTasksProvider(_personFilter!));
+        final personLoading = personTasksAsync is AsyncLoading;
+        if (personTasksAsync != null) {
+          final ids = (personTasksAsync.value ?? const [])
+              .map((t) => t.id)
+              .toSet();
+          shown = shown.where((t) => ids.contains(t.id)).toList();
+        }
 
-        final listWidget = _personFilter == null
-            ? _TaskList(tasks: shown, teams: teams, orgId: orgId)
-            : FutureBuilder<List<Task>>(
-                future: ref
-                    .read(repositoryProvider)
-                    .getTasksForPerson(_personFilter!),
-                builder: (context, snap) {
-                  if (!snap.hasData) {
-                    return const Padding(
-                      padding: EdgeInsets.only(top: 32),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  final ids = snap.data!.map((t) => t.id).toSet();
-                  final filtered =
-                      shown.where((t) => ids.contains(t.id)).toList();
-                  if (filtered.isEmpty) {
-                    return EmptyState(
-                      icon: Icons.person_search_outlined,
-                      title: 'No tasks for this person',
-                      body: 'Assign a task to them and it will show up here.',
-                      actionLabel: 'Add a task',
-                      onAction: () => showNewTaskSheet(context, orgId: orgId),
-                    );
-                  }
-                  return _TaskList(tasks: filtered, teams: teams, orgId: orgId);
-                },
-              );
-
-        return ListView(
+        // Lazy list: 1000+ tasks build only their on-screen rows.
+        // The old version built every card eagerly in a Column.
+        return CustomScrollView(
           controller: scrollController,
-          padding: const EdgeInsets.fromLTRB(18, 54, 18, 130),
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '$openCount open',
-                        style: TextStyle(color: context.muted, fontSize: 13),
-                      ),
-                      const SizedBox(height: 4),
-                      Text('Tasks', style: Theme.of(context).textTheme.displayLarge),
-                    ],
-                  ),
-                ),
-                KeelAddIconButton(
-                  onPressed: () => showNewTaskSheet(context, orgId: orgId),
-                  tooltip: 'Add a task',
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            KeelSegmented<String>(
-              options: const [
-                ('All', 'All'),
-                ('Open', 'Open'),
-                ('Done', 'Done'),
-              ],
-              selected: _segment,
-              onChanged: (v) => setState(() => _segment = v),
-            ),
-            const SizedBox(height: 12),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _FilterChip(
-                    label: 'Overdue',
-                    selected: overdueOnly,
-                    color: KeelTokens.overdue,
-                    onTap: () => ref
-                        .read(tasksOverdueFilterProvider.notifier)
-                        .state = !overdueOnly,
-                  ),
-                  const SizedBox(width: 8),
-                  _FilterChip(
-                    label: 'All teams',
-                    selected: _teamFilter == null,
-                    color: context.accent,
-                    onTap: () => setState(() => _teamFilter = null),
-                  ),
-                  for (final t in teams) ...[
-                    const SizedBox(width: 8),
-                    _FilterChip(
-                      label: t.name,
-                      selected: _teamFilter == t.id,
-                      color: KeelTokens.colorFromHex(t.colorHex),
-                      onTap: () => setState(
-                        () => _teamFilter = _teamFilter == t.id ? null : t.id,
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(18, 54, 18, 0),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '$openCount open',
+                                style: TextStyle(
+                                  color: context.muted,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Tasks',
+                                style: Theme.of(context).textTheme.displayLarge,
+                              ),
+                            ],
+                          ),
+                        ),
+                        KeelAddIconButton(
+                          onPressed: () =>
+                              showNewTaskSheet(context, orgId: orgId),
+                          tooltip: 'Add a task',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    KeelSegmented<String>(
+                      options: const [
+                        ('All', 'All'),
+                        ('Open', 'Open'),
+                        ('Done', 'Done'),
+                      ],
+                      selected: _segment,
+                      onChanged: (v) => setState(() => _segment = v),
+                    ),
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _FilterChip(
+                            label: 'Overdue',
+                            selected: overdueOnly,
+                            color: KeelTokens.overdue,
+                            onTap: () => ref
+                                .read(tasksOverdueFilterProvider.notifier)
+                                .state = !overdueOnly,
+                          ),
+                          const SizedBox(width: 8),
+                          _FilterChip(
+                            label: 'All teams',
+                            selected: _teamFilter == null,
+                            color: context.accent,
+                            onTap: () => setState(() => _teamFilter = null),
+                          ),
+                          for (final t in teams) ...[
+                            const SizedBox(width: 8),
+                            _FilterChip(
+                              label: t.name,
+                              selected: _teamFilter == t.id,
+                              color: KeelTokens.colorFromHex(t.colorHex),
+                              onTap: () => setState(
+                                () => _teamFilter =
+                                    _teamFilter == t.id ? null : t.id,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(width: 8),
+                          _FilterChip(
+                            label: 'All people',
+                            selected: _personFilter == null,
+                            color: context.accent,
+                            onTap: () => setState(() => _personFilter = null),
+                          ),
+                          for (final p in people) ...[
+                            const SizedBox(width: 8),
+                            _FilterChip(
+                              label: p.name.split(' ').first,
+                              selected: _personFilter == p.id,
+                              color: context.accent,
+                              onTap: () => setState(
+                                () => _personFilter =
+                                    _personFilter == p.id ? null : p.id,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
+                    const SizedBox(height: 14),
                   ],
-                  const SizedBox(width: 8),
-                  _FilterChip(
-                    label: 'All people',
-                    selected: _personFilter == null,
-                    color: context.accent,
-                    onTap: () => setState(() => _personFilter = null),
-                  ),
-                  for (final p in people) ...[
-                    const SizedBox(width: 8),
-                    _FilterChip(
-                      label: p.name.split(' ').first,
-                      selected: _personFilter == p.id,
-                      color: context.accent,
-                      onTap: () => setState(
-                        () => _personFilter =
-                            _personFilter == p.id ? null : p.id,
-                      ),
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
-            const SizedBox(height: 14),
-            if (shown.isEmpty && _personFilter == null)
-              EmptyState(
-                icon: overdueOnly
-                    ? Icons.event_busy_outlined
-                    : Icons.check_box_outlined,
-                title: overdueOnly
-                    ? 'Nothing overdue'
-                    : _segment == 'Done'
-                        ? 'No completed tasks'
-                        : 'No tasks yet',
-                body: overdueOnly
-                    ? 'All caught up — nothing is past its due date.'
-                    : 'Add your first task and it will show up here.',
-                actionLabel: 'Add a task',
-                onAction: () => showNewTaskSheet(context, orgId: orgId),
+            if (personLoading)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(top: 32),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              )
+            else if (shown.isEmpty)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 130),
+                sliver: SliverToBoxAdapter(
+                  child: _personFilter == null
+                      ? EmptyState(
+                          icon: overdueOnly
+                              ? Icons.event_busy_outlined
+                              : Icons.check_box_outlined,
+                          title: overdueOnly
+                              ? 'Nothing overdue'
+                              : _segment == 'Done'
+                                  ? 'No completed tasks'
+                                  : 'No tasks yet',
+                          body: overdueOnly
+                              ? 'All caught up — nothing is past its due date.'
+                              : 'Add your first task and it will show up here.',
+                          actionLabel: 'Add a task',
+                          onAction: () =>
+                              showNewTaskSheet(context, orgId: orgId),
+                        )
+                      : EmptyState(
+                          icon: Icons.person_search_outlined,
+                          title: 'No tasks for this person',
+                          body:
+                              'Assign a task to them and it will show up here.',
+                          actionLabel: 'Add a task',
+                          onAction: () =>
+                              showNewTaskSheet(context, orgId: orgId),
+                        ),
+                ),
               )
             else
-              listWidget,
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 130),
+                sliver: SliverList.builder(
+                  itemCount: shown.length,
+                  itemBuilder: (context, i) {
+                    final t = shown[i];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: DismissibleTaskCard(
+                        task: t,
+                        team: teams
+                            .where((x) => x.id == t.teamId)
+                            .firstOrNull,
+                        onTap: () => showTaskOverviewSheet(
+                          context,
+                          task: t,
+                          orgId: orgId,
+                          onOpenTeamPage: (team) => openTeamPage(
+                            context,
+                            team: team,
+                            orgId: orgId,
+                          ),
+                        ),
+                        onOpenPage: () =>
+                            openTaskPage(context, task: t, orgId: orgId),
+                      ),
+                    );
+                  },
+                ),
+              ),
           ],
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (_, _) => const Center(child: Text('Could not load tasks.')),
-    );
-  }
-}
-
-/// Person filter needs assignee data; resolved asynchronously in the
-/// screen above (FutureBuilder over getTasksForPerson), so the list
-/// itself stays a plain lazy column.
-class _TaskList extends ConsumerWidget {
-  final List<Task> tasks;
-  final List<Team> teams;
-  final String orgId;
-  const _TaskList({required this.tasks, required this.teams, required this.orgId});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Column(
-      children: [
-        for (final t in tasks)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: DismissibleTaskCard(
-              task: t,
-              team: teams.where((x) => x.id == t.teamId).firstOrNull,
-              onTap: () =>
-                  showTaskDetailSheet(context, task: t, orgId: orgId),
-            ),
-          ),
-      ],
     );
   }
 }

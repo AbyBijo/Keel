@@ -204,6 +204,56 @@ final taskAssigneesProvider = StreamProvider.family<List<Person>, String>((
   }
 });
 
+/// Live search for the People tab (name, role, phone, email, team).
+/// A provider (not a FutureBuilder in the list) so the list below can
+/// stay a lazy SliverList. Phones/emails/teams are fetched in bulk,
+/// once per keystroke — never one query per person.
+final filteredPeopleProvider =
+    FutureProvider.family<List<Person>, ({String orgId, String query})>((
+  ref,
+  args,
+) async {
+  final repo = ref.watch(repositoryProvider);
+  final people = await repo.getPeople(args.orgId);
+  final q = args.query.trim().toLowerCase();
+  if (q.isEmpty) return people;
+  final phones = await repo.db.select(repo.db.personPhones).get();
+  final emails = await repo.db.select(repo.db.personEmails).get();
+  final memberships = await repo.db.select(repo.db.teamMembers).get();
+  final teams = await repo.getTeams(args.orgId);
+  final teamNameById = {for (final t in teams) t.id: t.name};
+  final phonesByPerson = <String, List<String>>{};
+  for (final ph in phones) {
+    (phonesByPerson[ph.personId] ??= []).add(ph.number);
+  }
+  final emailsByPerson = <String, List<String>>{};
+  for (final em in emails) {
+    (emailsByPerson[em.personId] ??= []).add(em.address);
+  }
+  final teamNamesByPerson = <String, List<String>>{};
+  for (final m in memberships) {
+    final name = teamNameById[m.teamId];
+    if (name != null) (teamNamesByPerson[m.personId] ??= []).add(name);
+  }
+  return people.where((p) {
+    if (p.name.toLowerCase().contains(q) ||
+        p.roleTitle.toLowerCase().contains(q)) {
+      return true;
+    }
+    final hay = [
+      ...(phonesByPerson[p.id] ?? const []),
+      ...(emailsByPerson[p.id] ?? const []),
+      ...(teamNamesByPerson[p.id] ?? const []),
+    ].join(' ').toLowerCase();
+    return hay.contains(q);
+  }).toList();
+});
+
+/// One task, live — used by the task overview sheet and the task page.
+final taskProvider = StreamProvider.family<Task?, String>((ref, taskId) {
+  return ref.watch(repositoryProvider).watchTask(taskId);
+});
+
 final subTodosProvider = StreamProvider.family<List<SubTodo>, String>((
   ref,
   taskId,

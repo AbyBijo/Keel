@@ -16,10 +16,14 @@ Color firstTeamColor(List<Team> teams) =>
 /// One task card, used on Home ("Up next"), Tasks, the team page and the
 /// person card. Checkbox, due label, team chip, stacked avatars and the
 /// sub-todo checklist underneath — all live from the DB streams.
+///
+/// Tap the card (except the arrow) opens the task overview sheet;
+/// [onOpenPage] is the arrow at the right — it opens the full task page.
 class TaskCard extends ConsumerStatefulWidget {
   final Task task;
   final Team? team;
   final VoidCallback onTap;
+  final VoidCallback onOpenPage;
   final bool showSubTodos;
 
   const TaskCard({
@@ -27,6 +31,7 @@ class TaskCard extends ConsumerStatefulWidget {
     required this.task,
     required this.team,
     required this.onTap,
+    required this.onOpenPage,
     this.showSubTodos = true,
   });
 
@@ -129,6 +134,30 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                   data: (people) => _AssigneeAvatars(people: people),
                   loading: () => const SizedBox(width: 28, height: 28),
                   error: (_, _) => const SizedBox.shrink(),
+                ),
+                const SizedBox(width: 8),
+                // Arrow: opens the full task page. The card tap (handled
+                // by KeelCard) opens the overview sheet instead.
+                Semantics(
+                  button: true,
+                  label: 'Open task page for "${task.title}"',
+                  child: GestureDetector(
+                    onTap: widget.onOpenPage,
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: KeelTokens.tint14(context.accent, context.card),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.chevron_right,
+                        color: context.accent,
+                        size: 22,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -317,12 +346,14 @@ class DismissibleTaskCard extends ConsumerWidget {
   final Task task;
   final Team? team;
   final VoidCallback onTap;
+  final VoidCallback onOpenPage;
 
   const DismissibleTaskCard({
     super.key,
     required this.task,
     required this.team,
     required this.onTap,
+    required this.onOpenPage,
   });
 
   @override
@@ -366,7 +397,12 @@ class DismissibleTaskCard extends ConsumerWidget {
           );
         }
       },
-      child: TaskCard(task: task, team: team, onTap: onTap),
+      child: TaskCard(
+        task: task,
+        team: team,
+        onTap: onTap,
+        onOpenPage: onOpenPage,
+      ),
     );
   }
 }
