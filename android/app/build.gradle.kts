@@ -1,3 +1,6 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -10,11 +13,18 @@ plugins {
 // Without it, release builds fall back to the debug key so that
 // `flutter run --release` still works locally. Debug and release keys
 // must stay distinct and each fixed across builds of its type.
-val keystoreProperties = java.util.Properties()
+// NOTE: fully-qualified java.util/java.io references do NOT resolve in
+// this Kotlin DSL script (CI Run #10: "Unresolved reference: util/io"),
+// so the types are imported above and used unqualified. The store file
+// is also resolved here at top level, because file() is not in scope
+// inside the signingConfigs create() block (CI Run #10, line 48).
+val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
+val releaseStoreFile = keystoreProperties.getProperty("storeFile")
+    ?.let { rootProject.file(it) }
 
 android {
     namespace = "com.abybijo.keel"
@@ -43,10 +53,10 @@ android {
 
     signingConfigs {
         create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String?
-            keyPassword = keystoreProperties["keyPassword"] as String?
-            storeFile = keystoreProperties["storeFile"]?.let { file(it) }
-            storePassword = keystoreProperties["storePassword"] as String?
+            keyAlias = keystoreProperties.getProperty("keyAlias")
+            keyPassword = keystoreProperties.getProperty("keyPassword")
+            storeFile = releaseStoreFile
+            storePassword = keystoreProperties.getProperty("storePassword")
         }
     }
 
