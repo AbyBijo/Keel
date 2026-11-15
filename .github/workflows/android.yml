@@ -52,12 +52,14 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
 
+      # NOTE (CI Run #28, 2026-11-15): apksigner is NOT on the runner PATH;
+      # call it by its full path under the installed build-tools.
       - name: Verify debug APK signature (v2 + v3)
         run: |
           APK=$(find app/build/outputs/apk/debug -name '*.apk' | head -n 1)
           echo "APK: $APK"
           ls -lh "$APK"
-          apksigner verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -98,7 +100,7 @@ jobs:
           APK=$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)
           echo "APK: $APK"
           ls -lh "$APK"
-          apksigner verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
 
       - name: Upload release APK
         if: steps.release-check.outputs.has_release_secrets == 'true'
