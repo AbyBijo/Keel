@@ -39,12 +39,46 @@ policy.
 - **Made yours** — dark mode, text size, accent colour, haptics and
   week start, all in Settings → Personalisation.
 
-## How tiles work
+## The complete feature details
 
-Tap a task, team or person tile (anywhere except the arrow) and a
-quick overview sheet slides up with the essentials and quick
-actions — for a person, **Call** is on the right with **Message**
-(WhatsApp) directly below it. Tap the arrow and the full page opens.
+- **Organizations** — run one organization or several; switch
+  between them from the Home header. First launch is a 2-step
+  setup, never shown again.
+- **Teams** — create a team with a leader (who must be a member),
+  members, a colour and at most one main task. Each team shows its
+  progress (done tasks out of all its tasks) at a glance.
+- **People** — every person keeps unlimited phone numbers and email
+  addresses, a role, notes and a photo. Call, email or message
+  (WhatsApp) straight from their card. Live search across name,
+  role, phone, email and team.
+- **Tasks** — due dates, priorities, notes, sub-todos and assignees.
+  A task can belong to a team, to people, to both, or stand alone.
+  Filter by All / Open / Done, by team or person, or show overdue
+  only. Swipe to delete or complete.
+- **Sub-todos** — break a task into steps. Finishing the last step
+  offers to complete the task; reopening a step reopens it.
+- **Overview sheets** — tap a task, team or person tile (anywhere
+  except the arrow) and a quick sheet slides up: the task sheet has
+  the checkbox, due date, notes, sub-todo checklist, assignees, a
+  button to its team, and Complete / Edit / Delete (with Undo); the
+  person sheet has **Call** on the right with **Message** (WhatsApp)
+  directly below it; the team sheet has stats, main task and
+  members. Tap the arrow and the full page opens.
+- **Home, at a glance** — a greeting that follows the time of day, a
+  progress dial, stat tiles, an Up next list, team cards and global
+  search. The floating Add button opens Task, Person or Team.
+- **Undo, everywhere it matters** — deleting a task, person or team
+  shows a 6-second Undo. Deleting a team keeps its people and tasks;
+  deleting a person removes only their assignments and memberships.
+- **Reminders** — a daily digest of due and overdue tasks at a time
+  you choose.
+- **Backup** — export everything to a file you control and restore
+  it later, through the Android file picker. Tasks can also be
+  exported as CSV.
+- **Sample data** — try it with a ready-made demo organization
+  (Northwind Studio) from Settings, or start empty.
+- **Made yours** — dark mode, text size, accent colour, haptics and
+  week start, all in Settings → Personalisation.
 
 ## Personalisation
 
