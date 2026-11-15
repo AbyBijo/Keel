@@ -1,0 +1,13 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Material Icons Round "anchor" (Apache 2.0), the exact glyph used by
+         the Flutter app's About / onboarding tile (Icons.anchor_rounded).
+         Scaled into the adaptive-icon safe zone (central 60 of 108) so
+         launchers never crop it. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 56.5 46.5 V 43.55 C 59.4 42.5 61.5 39.75 61.5 36.5 C 61.5 32.38 58.12 29 54 29 S 46.5 32.38 46.5 36.5 C 46.5 39.75 48.6 42.5 51.5 43.55 V 46.5 H 46.5 C 45.12 46.5 44 47.62 44 49 V 49 C 44 50.38 45.12 51.5 46.5 51.5 H 51.5 V 73.8 C 45.95 72.97 40.02 69.6 37.62 65.38 L 40.48 62.52 C 41.02 61.98 40.95 61.1 40.35 60.65 L 33.5 55.5 C 32.67 54.88 31.5 55.48 31.5 56.5 V 61.5 C 31.5 71.2 43.8 79 54 79 S 76.5 71.2 76.5 61.5 V 56.5 C 76.5 55.48 75.33 54.88 74.5 55.5 L 67.65 60.62 C 67.05 61.08 66.98 61.98 67.53 62.5 L 70.38 65.35 C 67.97 69.57 62.05 72.95 56.5 73.77 V 51.5 H 61.5 C 62.88 51.5 64 50.38 64 49 V 49 C 64 47.62 62.88 46.5 61.5 46.5 H 56.5 Z M 54 34 C 55.38 34 56.5 35.12 56.5 36.5 S 55.38 39 54 39 S 51.5 37.88 51.5 36.5 S 52.62 34 54 34 Z" />
+</vector>

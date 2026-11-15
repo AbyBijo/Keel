@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Platform theme only: the whole UI is Compose, so this just sets the
+  window background and the system-bar behaviour. No Material XML theme
+  is used for the app's look (the kit is custom Apple-style Compose).
+-->
+<resources>
+    <style name="Theme.Keel" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/keel_background_light</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

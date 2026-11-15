@@ -1,108 +1,72 @@
-# Keel — security review
+# Keel (native) — Security review
 
-Checked 2026-11-15 during the local build (Flutter 3.35.7, Dart 3.9).
-Re-check after any dependency change with `flutter pub outdated` and
-`flutter pub audit` (if available in your Flutter version).
+## Permissions
 
-## 1. Network: none
+- **No INTERNET permission** in the manifest — by design. The app cannot
+  reach the network at all, so there is no exfiltration path.
+- `POST_NOTIFICATIONS` — runtime permission, only asked when the user
+  turns on the daily digest (off by default).
+- `CAMERA` — runtime permission, only for person photos taken in-app
+  (picker not yet wired; see DECISIONS.md).
+- `SCHEDULE_EXACT_ALARM` — for the daily digest alarm; falls back to an
+  inexact repeating alarm when the user has not granted exact alarms.
 
-- `android/app/src/main/AndroidManifest.xml` contains **no `INTERNET`
-  permission**. Verified by grep during the build. (Flutter's
-  debug/profile manifests add it for tooling only; the shipped
-  main manifest does not have it.)
-- No HTTP client, no analytics SDK, no crash reporting, no tracker
-  dependency in `pubspec.yaml`. The only outbound action in the app is
-  `url_launcher` opening the three About-page links and `tel:` /
-  `mailto:` / `sms:` intents from a person card — all explicit user taps.
-- Fonts are bundled locally (`assets/fonts/` — Inter + Nunito, OFL);
-  nothing is fetched at runtime.
+## Data
 
-## 2. Dependencies (pinned in pubspec.yaml)
+- All data lives in the app's private SQLite database (`keel.sqlite`) and
+  DataStore. No account, no server, no analytics, no trackers, no crash
+  reporting.
+- All SQL goes through Room (compile-time checked, parameterised). No raw
+  string-concatenated queries anywhere.
+- Backups are written only through the Storage Access Framework (the user
+  picks the destination). **The backup file is validated before any data
+  is replaced** (`Repository.validateBackup`: format string, version, all
+  required lists present). Import runs inside one Room transaction, so a
+  bad file cannot leave half-imported data.
+- Backup size is capped at 200 MB (same as the Flutter build).
+- Photos: `photoPath` is a file name only. `BackupService.photoFile()`
+  strips any directory with `File(name).name`, so a crafted backup cannot
+  write outside `filesDir/photos/`. Photo files are validated by
+  **magic bytes** (JPEG / PNG / WebP), never by extension.
+- The debug keystore is committed as base64 text (`keystore/debug.keystore.b64`)
+  with debug-only credentials (`keel-debug`). That is the VoxFlow pattern:
+  debug keys are public by design and cannot sign a release. The release
+  keystore is never generated or committed; CI reads it from secrets.
+- No secrets, API keys or tokens anywhere in the code.
 
-| Package | Version | Note |
+## Dependencies (all pinned — no floating versions)
+
+| Dependency | Version | Notes |
 |---|---|---|
-| flutter_riverpod | 2.6.1 | State management. Maintained. |
-| drift | 2.28.1 | SQLite ORM. Maintained. |
-| sqlite3_flutter_libs | 0.5.24 | Bundled SQLite for Android. |
-| path_provider / path | 2.1.5 / 1.9.1 | App dirs. |
-| shared_preferences | 2.5.3 | Settings only (no user content). |
-| flutter_local_notifications | 19.4.2 | Daily digest only, local. |
-| timezone | 0.10.1 | Needed by the digest scheduler. |
-| file_picker | 10.3.2 | SAF picker for backup/restore/CSV. |
-| image_picker | 1.2.0 | Camera/gallery for person photos. |
-| archive | 4.0.7 | Zip for backups. |
-| url_launcher | 6.3.2 | Intents only. |
-| intl | 0.20.2 | Date formatting. |
-| uuid | 4.5.1 | Random ids. |
+| AGP | 8.9.1 | |
+| Kotlin | 2.1.0 | |
+| KSP | 2.1.0-1.0.29 | |
+| Compose BOM | 2025.01.00 | ui, material3, foundation, animation |
+| core-ktx | 1.15.0 | |
+| lifecycle | 2.8.7 | runtime-compose, viewmodel-compose |
+| activity-compose | 1.9.3 | |
+| navigation-compose | 2.8.5 | declared, not yet used by the UI |
+| Room | 2.7.0 | runtime, ktx, testing |
+| datastore-preferences | 1.1.1 | |
+| coroutines | 1.9.0 | android |
+| coroutines-test | 1.8.1 | test only |
+| junit | 4.13.2 | test only |
+| robolectric | 4.13 | test only |
+| androidx.test:core | 1.6.1 | test only |
+| material-icons-core | 1.7.8 | outline icons |
 
-Findings:
+No dependency with a known critical CVE was introduced at build time;
+the set is the current stable set for the pinned BOM. Re-check with
+`./gradlew dependencyCheck` (or the GitHub dependency graph) when the
+versions are next bumped.
 
-- **No known-vulnerable packages found in the resolved set** at build
-  time (`flutter pub outdated` shows newer versions available for some
-  packages, e.g. `uuid` 4.6.0, but the pinned versions have no known
-  CVE affecting this app's use). Versions are pinned exactly so a
-  rebuild cannot silently pull a different release.
-- `build_runner` 2.7.1 (not 2.7.2): 2.7.2 requires `build` 4.0.0,
-  which conflicts with `drift_dev` 2.28.1's `build` ^3.0.0. Pinned to
-  the compatible pair; revisit when drift_dev supports build 4.
-- No dependency phones home: none of the above makes network calls
-  except `url_launcher` on explicit tap (see §1).
+## Known limitations
 
-## 3. Data handling
-
-- **SQL:** all access goes through Drift generated code. No raw
-  string-concatenated queries anywhere; user input never reaches SQL
-  as text. The only `customStatement` calls are fixed DDL
-  (`PRAGMA foreign_keys = ON`, fixed `CREATE INDEX` statements).
-- **Foreign keys:** `PRAGMA foreign_keys = ON` in `beforeOpen`.
-  One deliberate gap: the Teams ↔ Tasks foreign keys are circular
-  (`Teams.mainTaskId → Tasks`, `Tasks.teamId → Teams`), so Drift drops
-  the `Tasks.teamId` FK constraint (it warns at codegen). The
-  repository enforces the same behaviour in code instead
-  (`deleteTeam` nulls task team ids first; `_deleteTaskRows` clears
-  main-task pointers first). See `DECISIONS.md`.
-- **Photos:** picked via `image_picker`, validated by magic bytes
-  (JPEG/PNG/WebP) before copying, copied into app-private storage
-  (`getApplicationDocumentsDirectory()/photos/`), DB stores only the
-  path. Displayed with `Image.file` + `errorBuilder` fallback.
-- **Backup/restore:** the zip is validated **before** any data is
-  replaced — `keel-backup.json` must exist, `format` must be
-  `keel-backup`, `version` must be 1, all lists must be present
-  (`KeelRepository.validateBackup`). Files over 200 MB are rejected.
-  Photos inside the zip are written to app-private storage and paths
-  are rewritten to the new location. Restore runs inside one
-  transaction.
-- **File picker input:** restore only accepts `.zip` picked by the
-  user; malformed zips / JSON raise a user-readable error and change
-  nothing.
-- **No secrets:** no API keys, passwords, tokens or hardcoded
-  credentials anywhere in the code. The release keystore is not in
-  the repo (see README → Signing).
-- **Soft delete / Undo:** delete executes immediately but keeps a
-  full snapshot (entity + children) in memory for 6 seconds; Undo
-  re-inserts it. Nothing is kept after the snackbar expires. See
-  `DECISIONS.md` for why this differs from a `deletedAt` column.
-
-## 4. Platform
-
-- `minSdk 26` (Android 8+), `targetSdk` = Flutter default (35).
-- No permissions beyond the defaults: no contacts, no location, no
-  microphone, no storage permission (SAF picker needs none).
-- `flutter_local_notifications` requests the Android 13+
-  `POST_NOTIFICATIONS` permission only when the user turns Reminders
-  on; declining it leaves the toggle on but no digest is delivered
-  (a snackbar explains it).
-
-## 5. Residual risks (accepted)
-
-- The debug keystore is the standard Android debug key — fine for
-  debug builds, never for release.
-- A backup zip contains photos + all data in plain JSON. It is the
-  user's file on their own phone; there is no encryption by design
-  (offline-first, user-controlled file). If the user shares the zip,
-  they share their data — the restore confirm dialog says what will
-  be replaced, but does not warn about sharing. Acceptable for v1;
-  consider a warning line in the backup dialog later.
-- `image_picker` on old devices may return a content URI the app
-  cannot copy; the failure path shows "That photo could not be used"
-  instead of crashing.
+- The debug keystore is in the repo by design (see above) — it must never
+  be used for release, and the release config falls back to it only when
+  `key.properties` is absent (local dev). CI always supplies the real
+  release key when the secrets exist.
+- Exact alarms need the user's grant on Android 12+; without it the digest
+  uses an inexact alarm and may arrive late. That is a deliberate
+  graceful degradation, not a silent failure.
+- The app has not had an on-device security review (no device test yet).
