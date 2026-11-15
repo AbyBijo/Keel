@@ -95,17 +95,13 @@ policy.
 
 ## Download
 
-Signed release APKs are built automatically by GitHub Actions on
-every push to `main` and attached to the run as the
-`keel-release-apk` artifact (Actions → latest run → Artifacts).
-Pick the APK for your phone:
+Get the latest release here: [Keel releases](https://github.com/AbyBijo/Keel/releases/latest)
 
-- **arm64-v8a — 22.4 MB** (most modern Android phones)
-- **armeabi-v7a — 20.0 MB**
-- **x86_64 — 23.6 MB**
+- **Most modern Android phones:** [app-arm64-v8a-release.apk](https://github.com/AbyBijo/Keel/releases/latest/download/app-arm64-v8a-release.apk)
+- **Older 32-bit phones:** [app-armeabi-v7a-release.apk](https://github.com/AbyBijo/Keel/releases/latest/download/app-armeabi-v7a-release.apk)
+- **x86_64 devices (mostly emulators):** [app-x86_64-release.apk](https://github.com/AbyBijo/Keel/releases/latest/download/app-x86_64-release.apk)
 
-There is no GitHub Release yet — the release route is still being
-decided, so the Actions artifact is the download for now.
+The debug build (`app-debug.apk`) is on the same release page. Sizes vary with each version — GitHub shows the size next to every file.
 
 If you had the earlier build under the old package name
 (`com.abybijo.keel`), uninstall it first: 1.2.0 is
