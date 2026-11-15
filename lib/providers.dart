@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -39,6 +41,9 @@ class KeelSettings extends ChangeNotifier {
   static const _kReduceMotion = 'reduce_motion';
   static const _kAccent = 'accent_hex';
   static const _kReminders = 'reminders_on';
+  static const _kHaptics = 'haptics_on';
+  static const _kHapticStrength = 'haptic_strength'; // light | medium | heavy
+  static const _kWeekStart = 'week_start'; // monday | saturday | sunday
   static const _kDigestHour = 'digest_hour';
   static const _kDigestMinute = 'digest_minute';
   static const _kLastBackup = 'last_backup_iso';
@@ -51,6 +56,9 @@ class KeelSettings extends ChangeNotifier {
   bool get reduceMotion => _prefs.getBool(_kReduceMotion) ?? false;
   String? get accentHex => _prefs.getString(_kAccent);
   bool get remindersOn => _prefs.getBool(_kReminders) ?? false;
+  bool get hapticsOn => _prefs.getBool(_kHaptics) ?? true;
+  String get hapticStrength => _prefs.getString(_kHapticStrength) ?? 'medium';
+  String get weekStart => _prefs.getString(_kWeekStart) ?? 'monday';
   int get digestHour => _prefs.getInt(_kDigestHour) ?? 8;
   int get digestMinute => _prefs.getInt(_kDigestMinute) ?? 0;
   DateTime? get lastBackup {
@@ -109,6 +117,21 @@ class KeelSettings extends ChangeNotifier {
 
   Future<void> setReminders(bool v) async {
     await _prefs.setBool(_kReminders, v);
+    notifyListeners();
+  }
+
+  Future<void> setHaptics(bool v) async {
+    await _prefs.setBool(_kHaptics, v);
+    notifyListeners();
+  }
+
+  Future<void> setHapticStrength(String v) async {
+    await _prefs.setString(_kHapticStrength, v);
+    notifyListeners();
+  }
+
+  Future<void> setWeekStart(String v) async {
+    await _prefs.setString(_kWeekStart, v);
     notifyListeners();
   }
 
@@ -205,22 +228,64 @@ final taskAssigneesProvider = StreamProvider.family<List<Person>, String>((
 });
 
 /// Live search for the People tab (name, role, phone, email, team).
+/// A StreamProvider, NOT a FutureProvider: the list must re-emit
+/// whenever any table it reads changes. As a one-shot FutureProvider
+/// it cached its first result forever, so a person added from the
+/// People tab or from the Create Team sheet never appeared until the
+/// app was restarted (the Shell keeps all tabs alive in an
+/// IndexedStack, so the screen is never rebuilt on tab switches).
 /// A provider (not a FutureBuilder in the list) so the list below can
 /// stay a lazy SliverList. Phones/emails/teams are fetched in bulk,
-/// once per keystroke — never one query per person.
+/// once per recompute — never one query per person.
 final filteredPeopleProvider =
-    FutureProvider.family<List<Person>, ({String orgId, String query})>((
+    StreamProvider.family<List<Person>, ({String orgId, String query})>((
   ref,
   args,
-) async {
+) async* {
   final repo = ref.watch(repositoryProvider);
-  final people = await repo.getPeople(args.orgId);
-  final q = args.query.trim().toLowerCase();
+  // Recompute whenever people, phones, emails, memberships or teams
+  // change — the search matches across all of them.
+  await for (final _ in _peopleSearchTrigger(repo, args.orgId)) {
+    yield await _filterPeople(repo, args.orgId, args.query);
+  }
+});
+
+/// Merges the Drift watch streams the people search reads into one
+/// void trigger stream. Each Drift watch emits immediately with its
+/// current rows, so the first recompute happens right away.
+Stream<void> _peopleSearchTrigger(KeelRepository repo, String orgId) {
+  final controller = StreamController<void>();
+  void emit(_) {
+    if (!controller.isClosed) controller.add(null);
+  }
+
+  final subs = <StreamSubscription>[
+    repo.watchPeople(orgId).listen(emit),
+    repo.db.select(repo.db.personPhones).watch().listen(emit),
+    repo.db.select(repo.db.personEmails).watch().listen(emit),
+    repo.db.select(repo.db.teamMembers).watch().listen(emit),
+    repo.watchTeams(orgId).listen(emit),
+  ];
+  controller.onCancel = () async {
+    for (final sub in subs) {
+      await sub.cancel();
+    }
+  };
+  return controller.stream;
+}
+
+Future<List<Person>> _filterPeople(
+  KeelRepository repo,
+  String orgId,
+  String query,
+) async {
+  final people = await repo.getPeople(orgId);
+  final q = query.trim().toLowerCase();
   if (q.isEmpty) return people;
   final phones = await repo.db.select(repo.db.personPhones).get();
   final emails = await repo.db.select(repo.db.personEmails).get();
   final memberships = await repo.db.select(repo.db.teamMembers).get();
-  final teams = await repo.getTeams(args.orgId);
+  final teams = await repo.getTeams(orgId);
   final teamNameById = {for (final t in teams) t.id: t.name};
   final phonesByPerson = <String, List<String>>{};
   for (final ph in phones) {
@@ -247,7 +312,7 @@ final filteredPeopleProvider =
     ].join(' ').toLowerCase();
     return hay.contains(q);
   }).toList();
-});
+}
 
 /// One task, live — used by the task overview sheet and the task page.
 final taskProvider = StreamProvider.family<Task?, String>((ref, taskId) {

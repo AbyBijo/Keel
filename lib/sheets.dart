@@ -117,41 +117,47 @@ class _ColorPickerFieldState extends State<ColorPickerField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            for (final preset in KeelTokens.teamPresets)
-              Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: GestureDetector(
-                  onTap: () => widget.onChanged(KeelTokens.hexOf(preset)),
-                  child: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: preset,
-                      borderRadius: BorderRadius.circular(13),
-                      border: widget.valueHex.toUpperCase() ==
+        // The swatch row scrolls horizontally: 6 presets + the custom
+        // swatch are wider than a narrow sheet, and a plain Row would
+        // overflow outside the sheet window (RenderFlex overflow).
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final preset in KeelTokens.teamPresets)
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: GestureDetector(
+                    onTap: () => widget.onChanged(KeelTokens.hexOf(preset)),
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: preset,
+                        borderRadius: BorderRadius.circular(13),
+                        border: widget.valueHex.toUpperCase() ==
+                                KeelTokens.hexOf(preset).toUpperCase()
+                            ? Border.all(color: context.ink, width: 2.5)
+                            : null,
+                      ),
+                      child: widget.valueHex.toUpperCase() ==
                               KeelTokens.hexOf(preset).toUpperCase()
-                          ? Border.all(color: context.ink, width: 2.5)
+                          ? const Icon(Icons.check, color: Colors.white, size: 20)
                           : null,
                     ),
-                    child: widget.valueHex.toUpperCase() ==
-                            KeelTokens.hexOf(preset).toUpperCase()
-                        ? const Icon(Icons.check, color: Colors.white, size: 20)
-                        : null,
                   ),
                 ),
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(color: context.line, width: 1.5),
+                ),
               ),
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(13),
-                border: Border.all(color: context.line, width: 1.5),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 14),
         _SliderRow(
@@ -883,17 +889,18 @@ class _NewPersonSheetState extends ConsumerState<_NewPersonSheet> {
         children: [
           KeelTextField(
             controller: _name,
+            label: 'Name',
             hint: 'Full name',
             autofocus: true,
             errorText: _error,
             textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: 12),
-          KeelTextField(controller: _role, hint: 'Role (optional)', textInputAction: TextInputAction.next),
+          KeelTextField(controller: _role, label: 'Role', hint: 'Role (optional)', textInputAction: TextInputAction.next),
           const SizedBox(height: 12),
-          KeelTextField(controller: _phone, hint: 'First phone (optional)', keyboardType: TextInputType.phone, textInputAction: TextInputAction.next),
+          KeelTextField(controller: _phone, label: 'Phone', hint: 'First phone (optional)', keyboardType: TextInputType.phone, textInputAction: TextInputAction.next),
           const SizedBox(height: 12),
-          KeelTextField(controller: _email, hint: 'First email (optional)', keyboardType: TextInputType.emailAddress, textInputAction: TextInputAction.next),
+          KeelTextField(controller: _email, label: 'Email', hint: 'First email (optional)', keyboardType: TextInputType.emailAddress, textInputAction: TextInputAction.next),
           const SizedBox(height: 16),
           const _Caption('Teams'),
           const SizedBox(height: 8),
@@ -927,7 +934,7 @@ class _NewPersonSheetState extends ConsumerState<_NewPersonSheet> {
             error: (_, _) => const SizedBox.shrink(),
           ),
           const SizedBox(height: 16),
-          KeelTextField(controller: _notes, hint: 'Notes (optional)', maxLines: 3),
+          KeelTextField(controller: _notes, label: 'Notes', hint: 'Notes (optional)', maxLines: 3),
         ],
       ),
     );
@@ -2038,9 +2045,16 @@ class _PersonOverviewSheet extends ConsumerWidget {
     Uri uri,
     String label,
   ) async {
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else if (context.mounted) {
+    // Launch directly and check the result instead of gating on
+    // canLaunchUrl, which false-negatives on Android 11+ without a
+    // matching <queries> declaration (see AndroidManifest).
+    bool opened = false;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened && context.mounted) {
       showKeelSnack(context, 'Could not open $label.');
     }
   }

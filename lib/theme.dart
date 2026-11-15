@@ -266,6 +266,27 @@ String initialsOf(String name) {
   return (parts.first[0] + parts.last[0]).toUpperCase();
 }
 
+/// The first day of the week containing [date], given the user's
+/// week-start setting ('monday' | 'saturday' | 'sunday'; anything else
+/// means Monday). Pure function — see test/week_start_test.dart.
+///
+/// NOTE: Keel has no week-based grouping today — due-soon is a fixed
+/// 2-day window (master prompt rule 8), Up next orders by due date,
+/// and due labels only name the weekday. Nothing hard-coded a week
+/// start, so there was nothing to rewire; this is the single place a
+/// week boundary is computed, and it always reads the setting, ready
+/// for the first week-based view.
+DateTime startOfWeek(DateTime date, String weekStart) {
+  final startWeekday = switch (weekStart) {
+    'saturday' => DateTime.saturday,
+    'sunday' => DateTime.sunday,
+    _ => DateTime.monday,
+  };
+  final day = DateTime(date.year, date.month, date.day);
+  final diff = (day.weekday - startWeekday + 7) % 7;
+  return day.subtract(Duration(days: diff));
+}
+
 /// "Today" / "Tomorrow" / weekday / "Overdue" / date, for task due labels.
 String dueLabel(DateTime? due, {required bool isDone}) {
   if (due == null) return '';

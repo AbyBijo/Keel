@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'haptics.dart';
 import 'links.dart';
 import 'providers.dart';
 import 'repo.dart';
@@ -76,11 +77,23 @@ class SettingsScreen extends ConsumerWidget {
               onTap: () => _pickAccent(context, ref),
             ),
             _SettingsRow(
-              icon: Icons.group_outlined,
-              iconColor: KeelTokens.overdue,
-              label: 'Team colors',
-              detail: 'Change any team’s color',
-              onTap: () => _manageTeamColors(context, ref),
+              icon: Icons.vibration_outlined,
+              iconColor: context.accent,
+              label: 'Haptics',
+              detail: settings.hapticsOn ? 'On' : 'Off',
+              trailing: Switch.adaptive(
+                value: settings.hapticsOn,
+                activeThumbColor: KeelTokens.success,
+                onChanged: (v) => settings.setHaptics(v),
+              ),
+            ),
+            const _HapticStrengthControl(),
+            _SettingsRow(
+              icon: Icons.calendar_month_outlined,
+              iconColor: const Color(0xFF4F6BED),
+              label: 'Week starts on',
+              detail: _weekStartLabel(settings.weekStart),
+              onTap: () => _pickWeekStart(context, ref),
             ),
           ],
         ),
@@ -98,13 +111,7 @@ class SettingsScreen extends ConsumerWidget {
               },
               onTap: () => _pickThemeMode(context, ref),
             ),
-            _SettingsRow(
-              icon: Icons.text_fields_outlined,
-              iconColor: const Color(0xFF9B5DE5),
-              label: 'Text size',
-              detail: _textSizeLabel(settings.textScale),
-              onTap: () => _pickTextSize(context, ref),
-            ),
+            _TextSizeSlider(settings: settings),
             _SettingsRow(
               icon: Icons.motion_photos_off_outlined,
               iconColor: KeelTokens.success,
@@ -278,13 +285,6 @@ class SettingsScreen extends ConsumerWidget {
   String _backupDate(DateTime d) =>
       '${d.day}/${d.month}/${d.year} ${_two(d.hour)}:${_two(d.minute)}';
 
-  String _textSizeLabel(double v) => switch (v) {
-        <= 0.9 => 'Small',
-        <= 1.05 => 'Default',
-        <= 1.2 => 'Large',
-        _ => 'Extra large',
-      };
-
   Future<void> _setReminders(
     BuildContext context,
     WidgetRef ref,
@@ -316,6 +316,41 @@ class SettingsScreen extends ConsumerWidget {
         );
       },
     );
+  }
+
+  String _weekStartLabel(String v) => switch (v) {
+        'saturday' => 'Saturday',
+        'sunday' => 'Sunday',
+        _ => 'Monday',
+      };
+
+  Future<void> _pickWeekStart(BuildContext context, WidgetRef ref) async {
+    final settings = ref.read(settingsProvider);
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Week starts on'),
+        children: [
+          for (final (value, label) in [
+            ('monday', 'Monday'),
+            ('saturday', 'Saturday'),
+            ('sunday', 'Sunday'),
+          ])
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(value),
+              child: Row(
+                children: [
+                  Text(label),
+                  const Spacer(),
+                  if (settings.weekStart == value)
+                    Icon(Icons.check, color: context.accent),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+    if (picked != null) await settings.setWeekStart(picked);
   }
 
   Future<void> _pickDigestTime(BuildContext context, WidgetRef ref) async {
@@ -395,9 +430,21 @@ class SettingsScreen extends ConsumerWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: name, decoration: const InputDecoration(hintText: 'Your name')),
+            TextField(
+              controller: name,
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                hintText: 'Your name',
+              ),
+            ),
             const SizedBox(height: 10),
-            TextField(controller: role, decoration: const InputDecoration(hintText: 'Your role')),
+            TextField(
+              controller: role,
+              decoration: const InputDecoration(
+                labelText: 'Role',
+                hintText: 'Your role',
+              ),
+            ),
           ],
         ),
         actions: [
@@ -492,106 +539,86 @@ class SettingsScreen extends ConsumerWidget {
     );
     if (picked != null) await settings.setThemeMode(picked);
   }
+}
 
-  Future<void> _pickTextSize(BuildContext context, WidgetRef ref) async {
-    final settings = ref.read(settingsProvider);
-    final picked = await showDialog<double>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('Text size'),
-        children: [
-          for (final (value, label) in [
-            (0.85, 'Small'),
-            (1.0, 'Default'),
-            (1.15, 'Large'),
-            (1.3, 'Extra large'),
-          ])
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(context).pop(value),
-              child: Row(
-                children: [
-                  Text(label, style: TextStyle(fontSize: 15 * value)),
-                  const Spacer(),
-                  if (settings.textScale == value)
-                    Icon(Icons.check, color: context.accent),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-    if (picked != null) await settings.setTextScale(picked);
+/// Text size as a slider with 4 locked stops — Small, Medium, Large,
+/// Extra Large — replacing the old picker dialog. The value persists
+/// through the existing setTextScale; main.dart still combines it with
+/// the system text scaler.
+class _TextSizeSlider extends StatelessWidget {
+  final KeelSettings settings;
+  const _TextSizeSlider({required this.settings});
+
+  static const _scales = [0.85, 1.0, 1.15, 1.3];
+  static const _labels = ['Small', 'Medium', 'Large', 'Extra large'];
+
+  static int _nearestIndex(double v) {
+    var best = 0;
+    for (var i = 1; i < _scales.length; i++) {
+      if ((v - _scales[i]).abs() < (v - _scales[best]).abs()) best = i;
+    }
+    return best;
   }
 
-  Future<void> _manageTeamColors(BuildContext context, WidgetRef ref) async {
-    final repo = ref.read(repositoryProvider);
-    final orgId = ref.read(activeOrgProvider).value;
-    if (orgId == null) return;
-    final teams = await repo.getTeams(orgId);
-    if (!context.mounted) return;
-    await showKeelDialogSheet<void>(
-      context,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Team colors', style: Theme.of(context).textTheme.displayMedium?.copyWith(fontSize: 24)),
-            const SizedBox(height: 12),
-            for (final team in teams)
-              KeelCard(
-                padding: const EdgeInsets.all(12),
-                onTap: () async {
-                  var hex = team.colorHex;
-                  final picked = await showDialog<String>(
-                    context: context,
-                    builder: (context) => StatefulBuilder(
-                      builder: (context, setState) => AlertDialog(
-                        title: Text('${team.name} color'),
-                        content: SingleChildScrollView(
-                          child: ColorPickerField(
-                            valueHex: hex,
-                            onChanged: (v) => setState(() => hex = v),
-                          ),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(null),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(hex),
-                            child: const Text('Use this color'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                  if (picked != null) {
-                    await repo.updateTeam(team.id, colorHex: picked);
-                  }
-                },
-                child: Row(
-                  children: [
-                    Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(
-                        color: KeelTokens.colorFromHex(team.colorHex),
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(team.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                    ),
-                    Icon(Icons.chevron_right, color: context.muted),
-                  ],
+  @override
+  Widget build(BuildContext context) {
+    final index = _nearestIndex(settings.textScale);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF9B5DE5),
+                  borderRadius: BorderRadius.circular(10),
                 ),
+                child: const Icon(Icons.text_fields_outlined, size: 19, color: Colors.white),
               ),
-          ],
-        ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text('Text size', style: TextStyle(fontSize: 15)),
+              ),
+              Text(
+                _labels[index],
+                style: TextStyle(color: context.muted, fontSize: 13),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: context.accent,
+              inactiveTrackColor: context.line,
+              thumbColor: context.accent,
+              overlayColor: context.accent.withValues(alpha: 0.15),
+              trackHeight: 4,
+            ),
+            child: Slider(
+              value: index.toDouble(),
+              min: 0,
+              max: 3,
+              divisions: 3,
+              label: _labels[index],
+              onChanged: (v) =>
+                  settings.setTextScale(_scales[v.round()]),
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (final label in _labels)
+                Text(
+                  label,
+                  style: TextStyle(color: context.muted, fontSize: 11),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -604,6 +631,104 @@ class _OrgManagerSheet extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<_OrgManagerSheet> createState() => _OrgManagerSheetState();
+}
+
+/// Vibration Intensity control (Personalisation, under the Haptics
+/// toggle). Always visible — never hidden. When Haptics is OFF the
+/// control stays on screen but greyed out and untouchable: taps do
+/// nothing and no preview buzz plays; the saved value just shows
+/// dimmed. When Haptics is ON, tapping an option saves it, shows it
+/// selected (filled pill + check) and immediately plays a preview
+/// buzz at exactly that strength, so the user feels what they picked.
+class _HapticStrengthControl extends ConsumerWidget {
+  const _HapticStrengthControl();
+
+  static const _options = [
+    ('light', 'Light'),
+    ('medium', 'Medium'),
+    ('heavy', 'Heavy'),
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final enabled = settings.hapticsOn;
+    final selected = settings.hapticStrength;
+    final content = Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text('Vibration Intensity', style: TextStyle(fontSize: 15)),
+              ),
+              if (!enabled)
+                Text('Off', style: TextStyle(color: context.muted, fontSize: 13)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              for (var i = 0; i < _options.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: enabled
+                        ? () async {
+                            await settings.setHapticStrength(_options[i].$1);
+                            KeelHaptics.preview(ref, _options[i].$1);
+                          }
+                        : null,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: selected == _options[i].$1
+                            ? context.accent
+                            : context.card,
+                        borderRadius: BorderRadius.circular(12),
+                        border: selected == _options[i].$1
+                            ? null
+                            : Border.all(color: context.line),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (selected == _options[i].$1)
+                            const Icon(Icons.check, size: 16, color: Colors.white),
+                          if (selected == _options[i].$1)
+                            const SizedBox(width: 4),
+                          Text(
+                            _options[i].$2,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                              color: selected == _options[i].$1
+                                  ? Colors.white
+                                  : context.ink,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+    if (!enabled) {
+      // Visible but untouchable: greyed out, taps blocked, no preview.
+      return Opacity(
+        opacity: 0.45,
+        child: IgnorePointer(child: content),
+      );
+    }
+    return content;
+  }
 }
 
 class _OrgManagerSheetState extends ConsumerState<_OrgManagerSheet> {
@@ -909,10 +1034,19 @@ class AboutPage extends StatelessWidget {
   const AboutPage({super.key});
 
   Future<void> _open(BuildContext context, String url, String label) async {
+    // Launch directly and check the result: gating on canLaunchUrl
+    // false-negatives on Android 11+ when the intent is not declared
+    // in <queries> (that was the About-links bug — the check said
+    // "cannot open" even though a browser exists). The manifest now
+    // also declares the VIEW/BROWSABLE queries, so both layers agree.
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else if (context.mounted) {
+    bool opened = false;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened && context.mounted) {
       showKeelSnack(context, 'Could not open $label.');
     }
   }
@@ -963,9 +1097,12 @@ class AboutPage extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           const KeelCard(
-            child: Text(
-              'One manager. Many teams. Everything stays on your phone.',
-              style: TextStyle(fontSize: 15, height: 1.45),
+            child: Center(
+              child: Text(
+                'One manager. Many teams. Everything stays on your phone.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 15, height: 1.45),
+              ),
             ),
           ),
           const SizedBox(height: 16),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -310,7 +311,11 @@ class _HomeBody extends ConsumerWidget {
   }
 }
 
-class _DialCard extends StatelessWidget {
+/// Dark progress dial card with a region-based touch response:
+/// pressing anywhere on the tile scales it slightly and shows a soft
+/// highlight centred where the finger lands (transform/opacity only,
+/// spring ~300/26 on release, no ripple). Reduce motion: simple fade.
+class _DialCard extends StatefulWidget {
   final double pct;
   final int done;
   final int total;
@@ -329,8 +334,57 @@ class _DialCard extends StatelessWidget {
   });
 
   @override
+  State<_DialCard> createState() => _DialCardState();
+}
+
+class _DialCardState extends State<_DialCard>
+    with SingleTickerProviderStateMixin {
+  /// Press amount 0..1: drives the scale and the highlight opacity.
+  late final AnimationController _press;
+  Offset? _touch;
+  bool _pressed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _press = AnimationController(vsync: this, value: 0);
+  }
+
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
+  }
+
+  void _onDown(PointerDownEvent e) {
+    setState(() {
+      _touch = e.localPosition;
+      _pressed = true;
+    });
+    _press.animateTo(
+      1,
+      duration: const Duration(milliseconds: 120),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _onUp() {
+    if (!_pressed) return;
+    setState(() => _pressed = false);
+    // Spring back to rest (kit spec: stiffness ~300, damping ~26).
+    _press.animateWith(
+      SpringSimulation(
+        const SpringDescription(mass: 1, stiffness: 300, damping: 26),
+        _press.value,
+        0.0,
+        0.0,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: context.dialCard,
@@ -338,7 +392,7 @@ class _DialCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          ProgressRing(value: pct, reduceMotion: reduceMotion),
+          ProgressRing(value: widget.pct, reduceMotion: widget.reduceMotion),
           const SizedBox(width: 18),
           Expanded(
             child: Column(
@@ -353,7 +407,7 @@ class _DialCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$done of $total tasks done',
+                  '${widget.done} of ${widget.total} tasks done',
                   style: TextStyle(
                     fontFamily: 'Nunito',
                     fontWeight: FontWeight.w700,
@@ -364,7 +418,7 @@ class _DialCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$overdue overdue · $dueSoon due soon',
+                  '${widget.overdue} overdue · ${widget.dueSoon} due soon',
                   style: TextStyle(
                     color: context.dialInk.withValues(alpha: 0.6),
                     fontSize: 13,
@@ -375,6 +429,65 @@ class _DialCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+
+    // Reduce motion: a simple fade on press, no scale or highlight.
+    if (widget.reduceMotion) {
+      return AnimatedOpacity(
+        opacity: _pressed ? 0.85 : 1.0,
+        duration: KeelTokens.fade,
+        child: Listener(
+          onPointerDown: _onDown,
+          onPointerUp: (_) => _onUp(),
+          onPointerCancel: (_) => _onUp(),
+          child: card,
+        ),
+      );
+    }
+    return AnimatedBuilder(
+      animation: _press,
+      builder: (context, _) {
+        final t = _press.value;
+        return Listener(
+          onPointerDown: _onDown,
+          onPointerUp: (_) => _onUp(),
+          onPointerCancel: (_) => _onUp(),
+          child: Transform.scale(
+            scale: 1 - 0.03 * t,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(30),
+              child: Stack(
+                children: [
+                  card,
+                  if (_touch != null)
+                    Positioned(
+                      left: _touch!.dx - 110,
+                      top: _touch!.dy - 110,
+                      width: 220,
+                      height: 220,
+                      child: IgnorePointer(
+                        child: Opacity(
+                          opacity: 0.14 * t,
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [
+                                  Color(0xFFFFFFFF),
+                                  Color(0x00FFFFFF),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

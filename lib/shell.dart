@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'haptics.dart';
 import 'home.dart';
 import 'people.dart';
 import 'providers.dart';
@@ -38,7 +39,7 @@ class _ShellState extends ConsumerState<Shell> {
       }
       return;
     }
-    HapticFeedback.selectionClick();
+    KeelHaptics.selection(ref);
     setState(() => _fabOpen = false);
     ref.read(tabIndexProvider.notifier).state = index;
   }
@@ -225,7 +226,7 @@ class _TabBar extends StatelessWidget {
 
 /// Floating Add button: rotates 45°, squircle morphs to a circle, three
 /// labelled pills rise above it with 40ms stagger.
-class _AddButton extends StatefulWidget {
+class _AddButton extends ConsumerStatefulWidget {
   final bool open;
   final VoidCallback onToggle;
   final ValueChanged<String> onPick;
@@ -236,10 +237,10 @@ class _AddButton extends StatefulWidget {
   });
 
   @override
-  State<_AddButton> createState() => _AddButtonState();
+  ConsumerState<_AddButton> createState() => _AddButtonState();
 }
 
-class _AddButtonState extends State<_AddButton>
+class _AddButtonState extends ConsumerState<_AddButton>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c;
 
@@ -342,7 +343,7 @@ class _AddButtonState extends State<_AddButton>
             ),
           GestureDetector(
             onTap: () {
-              HapticFeedback.lightImpact();
+              KeelHaptics.impact(ref);
               widget.onToggle();
             },
             child: AnimatedBuilder(

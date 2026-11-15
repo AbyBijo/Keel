@@ -138,3 +138,115 @@ anything not done. Read this before changing behaviour.
 - **No tablet-specific layout.** Phones first per the prompt;
   tablets get the phone layout stretched (max content width is not
   capped). A 600dp cap is an easy follow-up.
+
+## v1.2.0 — on-device fix round (2026-11-15)
+
+Release version. `pubspec.yaml` bumped to `1.2.0+2`
+(was `1.0.0+1`); `CHANGELOG.md` created. README rewritten as a
+public product page (no developer Structure / Where-to-edit / Tests
+/ Signing sections; developer material is one short "For developers"
+section at the end). Real CI sizes stated everywhere: release
+arm64-v8a 22.4 MB, armeabi-v7a 20.0 MB, x86_64 23.6 MB; debug
+77.3 MB. The old 7–12 MB estimate is dropped.
+
+25. **Persons list staleness (P0, user-reported on-device).**
+    Root cause, confirmed by reading the code: `PeopleScreen`
+    watched both `peopleProvider` (live StreamProvider) and
+    `filteredPeopleProvider` (a one-shot `FutureProvider.family`),
+    and displayed the future's result — so after any insert the
+    list went stale, and the Shell's `IndexedStack` kept the stale
+    screen alive across tab switches. Fix:
+    `filteredPeopleProvider` is now a `StreamProvider.family`
+    driven by a merged trigger stream (live `watchPeople` +
+    Drift watches on personPhones/personEmails/teamMembers +
+    `watchTeams`), so the list rebuilds live on every person add /
+    edit / delete and on team-create-with-new-person. `people.dart`
+    needed no change (same watch API). Regression tests:
+    `test/people_live_test.dart` (direct add; team-sheet flow).
+    Other `FutureBuilder`s are one-shot lookups re-created per
+    build, not the same bug; teams/tasks lists already use live
+    `StreamProvider`s — verified, left alone.
+
+26. **About links not reaching the browser (user-reported).**
+    Root cause: `AndroidManifest.xml` `<queries>` declared only
+    the `PROCESS_TEXT` intent — no `VIEW`/`BROWSABLE` https/http
+    declaration, so on Android 11+ `canLaunchUrl` false-negatived
+    and `_open` showed "Could not open". Fix: manifest now declares
+    `VIEW`+`BROWSABLE` for https/http plus tel/mailto/sms; `_open`
+    (settings), `_launch` (sheets, WhatsApp `wa.me`) and `_launch`
+    (people, tel/mailto/sms) launch directly and check the returned
+    bool, try/catch, snackbar only on genuine failure. No WebView
+    anywhere. Buy Me a Coffee URL confirmed from chat history
+    (`https://www.buymeacoffee.com/AbyBijo`); TO-CONFIRM comments
+    removed.
+
+27. **Text size slider.** The picker dialog is replaced by a
+    `Slider` (min 0, max 3, `divisions: 3`) with four locked stops
+    0.85 / 1.0 / 1.15 / 1.3 labelled Small / Medium / Large /
+    Extra Large, in Settings → Personalisation where the picker row
+    was. Persists via the existing `setTextScale`; `main.dart`
+    combined system × in-app scaling untouched. ("Default" renamed
+    to "Medium".)
+
+28. **Progress dial animation.** Arc now uses `Curves.easeInOut`
+    (chosen over `easeInOutCubic`: the cubic variant's long slow
+    tails would make the 700 ms count-up feel sluggish).
+    `_DialCard` is a `StatefulWidget` with region-based touch
+    response: `Listener` records the pointer-down position; press
+    drives scale 1 → 0.97 and a soft white radial highlight centred
+    at the touch point (opacity 0.14 × press), springing back with
+    `SpringSimulation` (300/26, kit spec); transform/opacity only,
+    no blue ripple; reduce-motion = simple `AnimatedOpacity` fade.
+    Count-up behaviour kept.
+
+29. **About tagline centred.** "One manager. Many teams.
+    Everything stays on your phone." is wrapped in `Center` +
+    `textAlign: TextAlign.center`.
+
+30. **Profile field labels.** `_editProfile` (Settings → Profile)
+    now has `labelText: 'Name'` / `'Role'`; `_NewPersonSheet`
+    passes `label:` to `KeelTextField` for Name / Role / Phone /
+    Email / Notes (kit pattern). Validation, controllers, saving
+    unchanged. Out of scope, not changed: `_editPerson`
+    (people.dart) and onboarding name/role fields — same hint-only
+    pattern, follow-up candidates.
+
+31. **Team colour removed from Settings → Personalisation.** The
+    'Team colors' row and the whole `_manageTeamColors` method are
+    deleted; no setting/preference/provider entry existed only to
+    serve it (colours live per-team as `colorHex`). Team-colour
+    editing inside team screens unchanged. Accent colour verified
+    present in Personalisation already — left exactly as is, not
+    duplicated.
+
+32. **Team colour picker overflow.** `ColorPickerField`'s preset
+    swatch `Row` (6 × 38 px + gaps ≈ 326 px) overflowed narrow
+    sheets. It now wraps in a horizontal `SingleChildScrollView`;
+    same 6 presets, same selection ring and tap behaviour.
+
+33. **Haptics + Vibration Intensity (Personalisation).** New
+    settings: `haptics_on` (default `true`), `haptic_strength`
+    (default `'medium'`). All three `HapticFeedback` call sites
+    (checkbox, tab tap, Add button) now go through one helper,
+    `lib/haptics.dart` (`KeelHaptics.impact` / `.selection` /
+    `.preview`): off means silent everywhere; strength maps
+    Light → `lightImpact`, Medium → `mediumImpact`, Heavy →
+    `heavyImpact`. Selection taps use the same strength mapping as
+    impacts (not a separate `selectionClick`), so the feel is
+    uniform. The Vibration Intensity control is ALWAYS visible:
+    when Haptics is off it shows greyed out (opacity 0.45) and
+    untouchable (`IgnorePointer`, taps do nothing, no preview);
+    when on, tapping Light/Medium/Heavy saves it, shows it
+    selected (filled accent pill + check) and immediately plays a
+    preview buzz at exactly that strength.
+
+34. **Week Starts On (Personalisation).** New setting `week_start`
+    (default `'monday'`), picker dialog with exactly Monday /
+    Saturday / Sunday. Surveyed the code: the app computes NO
+    week boundary today — due-soon is a fixed 2-day window
+    (master-prompt rule 8, must not change), Up next orders by due
+    date, due labels only name the weekday. Nothing hard-coded a
+    week start, so nothing was rewired; the setting is persisted
+    and the new pure helper `startOfWeek` (`lib/theme.dart`) reads
+    it, tested in `test/week_start_test.dart`, ready for the first
+    week-based view.

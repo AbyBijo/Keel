@@ -2,9 +2,10 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'db.dart';
+import 'haptics.dart';
 import 'theme.dart';
 
 // ---------------------------------------------------------------------------
@@ -248,7 +249,7 @@ class AvatarStack extends StatelessWidget {
 // Checkbox — 9px squircle; fills green with a scale pop and a drawn check.
 // ---------------------------------------------------------------------------
 
-class KeelCheckbox extends StatelessWidget {
+class KeelCheckbox extends ConsumerWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
   final double size;
@@ -263,14 +264,14 @@ class KeelCheckbox extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Semantics(
       button: true,
       checked: value,
       label: semanticLabel ?? (value ? 'Completed' : 'Mark complete'),
       child: GestureDetector(
         onTap: () {
-          HapticFeedback.lightImpact();
+          KeelHaptics.impact(ref);
           onChanged(!value);
         },
         behavior: HitTestBehavior.opaque,
@@ -350,12 +351,19 @@ class ProgressRing extends StatefulWidget {
 class _ProgressRingState extends State<ProgressRing>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c;
+  late final Animation<double> _curved;
   double _from = 0;
 
   @override
   void initState() {
     super.initState();
     _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
+    // The arc eases in and out: gentle at both ends of the sweep,
+    // instead of the previous constant-speed (linear) arc.
+    // Curves.easeInOut (not easeInOutCubic): the cubic variant has
+    // longer slow tails that would make the 700ms count-up feel
+    // sluggish; easeInOut keeps the sweep symmetric and snappy.
+    _curved = CurvedAnimation(parent: _c, curve: Curves.easeInOut);
     _c.forward();
   }
 
@@ -377,11 +385,11 @@ class _ProgressRingState extends State<ProgressRing>
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _c,
+      animation: _curved,
       builder: (context, _) {
         final v = widget.reduceMotion
             ? widget.value
-            : _from + (widget.value - _from) * _c.value;
+            : _from + (widget.value - _from) * _curved.value;
         return SizedBox(
           width: widget.size,
           height: widget.size,
