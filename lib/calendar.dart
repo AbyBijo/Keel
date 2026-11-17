@@ -32,6 +32,38 @@ Map<String, List<Task>> tasksByDay(List<Task> tasks) {
   return map;
 }
 
+/// The tasks shown for one day in the day list (1.3.0, DECISIONS.md
+/// 41): open tasks due that day first, then tasks due that day
+/// completed within the last ~24 hours, most recently completed
+/// first, shown as done. Same 24 h rule as Up next ([selectUpNext])
+/// — a ticked-off task stays on its day under the open tasks instead
+/// of vanishing, and is gone after about 24 hours. Dots are
+/// untouched: [tasksByDay] still feeds them with open tasks only.
+/// Pure.
+List<Task> dayTasks(List<Task> tasks, DateTime day, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  final key = dayKey(day);
+  final open = tasks
+      .where(
+        (t) =>
+            !t.isDone && t.dueDate != null && dayKey(t.dueDate!) == key,
+      )
+      .toList();
+  final recent = tasks
+      .where(
+        (t) =>
+            t.isDone &&
+            t.dueDate != null &&
+            dayKey(t.dueDate!) == key &&
+            t.completedAt != null &&
+            !t.completedAt!.isAfter(n) &&
+            n.difference(t.completedAt!) < const Duration(hours: 24),
+      )
+      .toList()
+    ..sort((a, b) => b.completedAt!.compareTo(a.completedAt!));
+  return [...open, ...recent];
+}
+
 /// Calendar tab (1.3.0, DECISIONS.md 35 + 39): a month view of task
 /// due dates — the only dates in the app — scoped to the active
 /// organization. Dots on days with open tasks, red when overdue;
@@ -78,7 +110,11 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         final teams = ref.watch(teamsProvider(orgId)).value ?? const [];
         Team? teamOf(String? id) => teams.where((t) => t.id == id).firstOrNull;
         final selectedKey = dayKey(_selected);
-        final selectedTasks = byDay[selectedKey] ?? const [];
+        // The day list keeps recently completed tasks at the bottom
+        // (DECISIONS.md 41); the grid dots above still use byDay,
+        // open tasks only. The list is stream-fed (tasksProvider),
+        // so ticking a task done reorders it at once, in place.
+        final selectedTasks = dayTasks(tasks, _selected);
         final selectedNote = noteByDay[selectedKey];
 
         return CustomScrollView(

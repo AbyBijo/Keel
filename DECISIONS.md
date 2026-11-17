@@ -343,3 +343,15 @@ arm64-v8a 22.4 MB, armeabi-v7a 20.0 MB, x86_64 23.6 MB; debug
     other. Tasks carry due dates, not times, so the due-date
     reminder lands on the due day; the exact time of day for each
     is a build-time detail.
+
+41. **Calendar day view keeps done tasks 24 h (user decision,
+    2026-11-17).** In the Calendar, when a person ticks a task
+    done for a day, it must stay on that day's list, but under
+    all the other to-do tasks for that day — exactly like Up
+    next: a completed task drops to the bottom under all open
+    tasks, shown as done, removed after about 24 hours. Same
+    ~24 h rule as Up next (item 38), reusing `Task.completedAt`;
+    no new rule invented. Dots are unchanged: they still mark
+    days with open tasks only, red when overdue. The day list is
+    stream-fed (`tasksProvider`), so the tick reorders the list
+    at once without leaving the page.

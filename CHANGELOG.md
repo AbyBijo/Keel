@@ -94,6 +94,10 @@ with Calendar, from on-device testing of 1.2.0.
 - Calendar notes: the user can keep a note for a day and for a
   task. On a day, the day note is the most prominent thing shown;
   a task's note is shown with the task on its day.
+- Calendar day view: a task ticked done stays on its day, under
+  the open tasks, shown as done, and is gone after about 24
+  hours — the same rule as Up next. Dots still mark open tasks
+  only.
 
 ### Organizations
 

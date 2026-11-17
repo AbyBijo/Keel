@@ -227,6 +227,87 @@ void main() {
       expect(byDay['2026-11-18']!.map((t) => t.id), ['c']);
       expect(byDay.length, 2);
     });
+
+    test('dayTasks: open first, recently done at the bottom, old done gone',
+        () {
+      final now = DateTime(2026, 11, 17, 12);
+      final day = DateTime(2026, 11, 17);
+      final tasks = [
+        task(
+          'done-recent',
+          isDone: true,
+          dueDate: day,
+          completedAt: now.subtract(const Duration(hours: 2)),
+        ),
+        task(
+          'done-older',
+          isDone: true,
+          dueDate: day,
+          completedAt: now.subtract(const Duration(hours: 20)),
+        ),
+        task(
+          'done-old',
+          isDone: true,
+          dueDate: day,
+          completedAt: now.subtract(const Duration(hours: 25)),
+        ),
+        task('open-a', dueDate: day),
+        task('open-b', dueDate: day),
+        task(
+          'done-other-day',
+          isDone: true,
+          dueDate: DateTime(2026, 11, 18),
+          completedAt: now.subtract(const Duration(hours: 1)),
+        ),
+        task('open-other-day', dueDate: DateTime(2026, 11, 18)),
+      ];
+      final result = dayTasks(tasks, day, now: now);
+      expect(
+        result.map((t) => t.id).toList(),
+        ['open-a', 'open-b', 'done-recent', 'done-older'],
+      );
+      // Dots are unchanged: tasksByDay still sees open tasks only.
+      expect(tasksByDay(tasks)['2026-11-17']!.map((t) => t.id), [
+        'open-a',
+        'open-b',
+      ]);
+    });
+
+    test('dayTasks: only a recently done task lists it; only an old one lists nothing',
+        () {
+      final now = DateTime(2026, 11, 17, 12);
+      final day = DateTime(2026, 11, 17);
+      expect(
+        dayTasks(
+          [
+            task(
+              'done-recent',
+              isDone: true,
+              dueDate: day,
+              completedAt: now.subtract(const Duration(hours: 1)),
+            ),
+          ],
+          day,
+          now: now,
+        ).map((t) => t.id),
+        ['done-recent'],
+      );
+      expect(
+        dayTasks(
+          [
+            task(
+              'done-old',
+              isDone: true,
+              dueDate: day,
+              completedAt: now.subtract(const Duration(days: 2)),
+            ),
+          ],
+          day,
+          now: now,
+        ),
+        isEmpty,
+      );
+    });
   });
 
   group('1.3.0 — Edit sheets reuse the create sheets', () {
