@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,8 +12,9 @@ import 'widgets.dart';
 
 /// First-team colour for a person (rule: avatar ring uses the FIRST team's
 /// colour; no team = neutral grey).
-Color firstTeamColor(List<Team> teams) =>
-    teams.isEmpty ? KeelTokens.noTeam : KeelTokens.colorFromHex(teams.first.colorHex);
+Color firstTeamColor(List<Team> teams) => teams.isEmpty
+    ? KeelTokens.noTeam
+    : KeelTokens.colorFromHex(teams.first.colorHex);
 
 /// One task card, used on Home ("Up next"), Tasks, the team page and the
 /// person card. Checkbox, due label, team chip, stacked avatars and the
@@ -75,6 +78,10 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                     await ref
                         .read(repositoryProvider)
                         .setTaskDone(task.id, done);
+                    // Reminders for this task must follow immediately:
+                    // a completed task gets none, a reopened one gets
+                    // them back. (1.3.0)
+                    unawaited(NotificationService.syncForRef(ref));
                   },
                 ),
                 const SizedBox(width: 4),
@@ -109,8 +116,8 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                                 color: overdue
                                     ? KeelTokens.overdue
                                     : dueSoon
-                                        ? KeelTokens.colorFromHex('#B7791F')
-                                        : context.muted,
+                                    ? KeelTokens.colorFromHex('#B7791F')
+                                    : context.muted,
                               ),
                             ),
                           if (dueText.isNotEmpty && widget.team != null)
@@ -165,25 +172,35 @@ class _TaskCardState extends ConsumerState<TaskCard> {
               subsAsync.when(
                 data: (subs) {
                   if (subs.isEmpty) return const SizedBox.shrink();
-                  final allDone =
-                      subs.every((s) => s.isDone) && !task.isDone;
+                  final doneCount = subs.where((s) => s.isDone).length;
+                  // 1.3.0: the preview shows only the next sub-todo
+                  // to do, and the done ones as a count ('2 of 8
+                  // done'). The full list stays on the task page.
+                  final next = subs.where((s) => !s.isDone).firstOrNull;
+                  final allDone = next == null && !task.isDone;
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 10),
                       Container(height: 1, color: context.line),
                       const SizedBox(height: 4),
-                      ...subs.map(
-                        (s) => _SubTodoRow(
-                          sub: s,
+                      if (next != null)
+                        _SubTodoRow(
+                          sub: next,
                           onToggle: (done) async {
                             final res = await ref
                                 .read(repositoryProvider)
-                                .toggleSubTodo(s.id, done);
+                                .toggleSubTodo(next.id, done);
                             if (res.allDone && mounted) {
                               setState(() => _promptDismissed = false);
                             }
                           },
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          '$doneCount of ${subs.length} done',
+                          style: TextStyle(color: context.muted, fontSize: 12),
                         ),
                       ),
                       // Rule 7: inline prompt (not a modal) when all
@@ -194,6 +211,7 @@ class _TaskCardState extends ConsumerState<TaskCard> {
                             await ref
                                 .read(repositoryProvider)
                                 .setTaskDone(task.id, true);
+                            unawaited(NotificationService.syncForRef(ref));
                           },
                           onDismiss: () =>
                               setState(() => _promptDismissed = true),
@@ -311,7 +329,11 @@ class _CompletePrompt extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle_outline, size: 20, color: KeelTokens.success),
+          const Icon(
+            Icons.check_circle_outline,
+            size: 20,
+            color: KeelTokens.success,
+          ),
           const SizedBox(width: 8),
           const Expanded(
             child: Text(
@@ -382,18 +404,37 @@ class DismissibleTaskCard extends ConsumerWidget {
         final repo = ref.read(repositoryProvider);
         if (direction == DismissDirection.startToEnd) {
           await repo.setTaskDone(task.id, !task.isDone);
+          unawaited(NotificationService.syncForRef(ref));
           return false;
         }
         return true;
       },
       onDismissed: (_) async {
         final repo = ref.read(repositoryProvider);
+        // Settings captured now: this widget may be unmounted by
+        // the time Undo runs, so the closure must not touch ref.
+        final settings = ref.read(settingsProvider);
         final snap = await repo.deleteTask(task.id);
+        // The task is gone: its reminders must not fire.
+        unawaited(NotificationService.cancelTaskReminders(task.id));
         if (context.mounted) {
           showUndoSnack(
             context,
             label: 'Task deleted',
-            onUndo: () => repo.restoreSnapshot(snap),
+            // Undo puts the task back, so its reminders come back
+            // too (explicit args only — no ref/context here).
+            onUndo: () async {
+              await repo.restoreSnapshot(snap);
+              unawaited(
+                NotificationService.syncTaskReminders(
+                  repo: repo,
+                  orgId: task.orgId,
+                  on: settings.remindersOn,
+                  hour: settings.digestHour,
+                  minute: settings.digestMinute,
+                ),
+              );
+            },
           );
         }
       },

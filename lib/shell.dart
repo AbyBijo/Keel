@@ -1,20 +1,23 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'calendar.dart';
 import 'haptics.dart';
 import 'home.dart';
-import 'people.dart';
 import 'providers.dart';
+import 'services.dart';
 import 'settings.dart';
 import 'sheets.dart';
 import 'tasks.dart';
-import 'teams.dart';
+import 'teams_tab.dart';
 import 'theme.dart';
 
-/// Root after onboarding: 5 tabs + frosted tab bar + floating Add button.
+/// Root after onboarding: 5 tabs (Home, Tasks, Teams, Calendar,
+/// Settings) + frosted tab bar + floating Add button.
 class Shell extends ConsumerStatefulWidget {
   const Shell({super.key});
 
@@ -24,6 +27,33 @@ class Shell extends ConsumerStatefulWidget {
 
 class _ShellState extends ConsumerState<Shell> {
   bool _fabOpen = false;
+  AppLifecycleListener? _lifecycleListener;
+  Timer? _delayedSync;
+
+  @override
+  void initState() {
+    super.initState();
+    // Notifications are reconciled whenever the app is opened: the
+    // digest gets fresh counts, and per-task reminders are
+    // re-derived from the current tasks (1.3.0). The plugin
+    // initialises after runApp in main(), so the first sync is
+    // delayed a little to let it land; later foregroundings sync
+    // on resume. The timer is cancelled on dispose so a disposed
+    // shell never fires a sync (and never leaves a pending timer).
+    _delayedSync = Timer(const Duration(seconds: 2), () {
+      if (mounted) unawaited(NotificationService.syncForRef(ref));
+    });
+    _lifecycleListener = AppLifecycleListener(
+      onResume: () => unawaited(NotificationService.syncForRef(ref)),
+    );
+  }
+
+  @override
+  void dispose() {
+    _delayedSync?.cancel();
+    _lifecycleListener?.dispose();
+    super.dispose();
+  }
 
   void _onTabTap(int index) {
     final current = ref.read(tabIndexProvider);
@@ -31,11 +61,7 @@ class _ShellState extends ConsumerState<Shell> {
       final controllers = ref.read(tabScrollControllersProvider);
       final c = controllers[index];
       if (c.hasClients) {
-        c.animateTo(
-          0,
-          duration: KeelTokens.spring,
-          curve: KeelTokens.easeOut,
-        );
+        c.animateTo(0, duration: KeelTokens.spring, curve: KeelTokens.easeOut);
       }
       return;
     }
@@ -73,8 +99,8 @@ class _ShellState extends ConsumerState<Shell> {
               children: const [
                 HomeScreen(),
                 TasksScreen(),
-                TeamsScreen(),
-                PeopleScreen(),
+                TeamsPeopleTab(),
+                CalendarScreen(),
                 SettingsScreen(),
               ],
             ),
@@ -108,10 +134,7 @@ class _ShellState extends ConsumerState<Shell> {
               left: 0,
               right: 0,
               bottom: 0,
-              child: _TabBar(
-                current: tabIndex,
-                onTap: _onTabTap,
-              ),
+              child: _TabBar(current: tabIndex, onTap: _onTabTap),
             ),
           ],
         ),
@@ -129,7 +152,7 @@ class _TabBar extends StatelessWidget {
     ('Home', Icons.home_outlined, Icons.home),
     ('Tasks', Icons.check_box_outlined, Icons.check_box),
     ('Teams', Icons.group_outlined, Icons.group),
-    ('People', Icons.person_outline, Icons.person),
+    ('Calendar', Icons.calendar_month_outlined, Icons.calendar_month),
     ('Settings', Icons.tune_outlined, Icons.tune),
   ];
 
@@ -138,7 +161,10 @@ class _TabBar extends StatelessWidget {
     final bottom = MediaQuery.of(context).padding.bottom;
     return ClipRRect(
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+        // 1.3.0: the blur was sigma 22 — heavy enough to drop frames
+        // and make a scroll feel dead on weaker phones. Sigma 8 keeps
+        // the frosted look at a fraction of the cost.
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
         child: Container(
           padding: EdgeInsets.only(top: 8, bottom: bottom + 10),
           decoration: BoxDecoration(
@@ -247,7 +273,10 @@ class _AddButtonState extends ConsumerState<_AddButton>
   @override
   void initState() {
     super.initState();
-    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 320));
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+    );
   }
 
   @override
@@ -330,7 +359,10 @@ class _AddButtonState extends ConsumerState<_AddButton>
                               const SizedBox(width: 8),
                               Text(
                                 pills[i].$2,
-                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                ),
                               ),
                             ],
                           ),

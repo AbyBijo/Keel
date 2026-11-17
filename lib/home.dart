@@ -134,7 +134,7 @@ class _HomeBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dateStr = DateFormat('EEE d MMM').format(DateTime.now());
-    final upNextFuture = ref.read(repositoryProvider).upNext(orgId);
+    final upNextAsync = ref.watch(upNextProvider(orgId));
 
     final content = ListView(
       controller: scrollController,
@@ -208,15 +208,19 @@ class _HomeBody extends ConsumerWidget {
               StatTile(
                 value: '$teamsCount',
                 label: 'Teams',
-                onTap: () =>
-                    ref.read(tabIndexProvider.notifier).state = 2,
+                onTap: () {
+                  ref.read(teamsTabSubProvider.notifier).state = 'teams';
+                  ref.read(tabIndexProvider.notifier).state = 2;
+                },
               ),
               const SizedBox(width: 8),
               StatTile(
                 value: '$peopleCount',
                 label: 'People',
-                onTap: () =>
-                    ref.read(tabIndexProvider.notifier).state = 3,
+                onTap: () {
+                  ref.read(teamsTabSubProvider.notifier).state = 'people';
+                  ref.read(tabIndexProvider.notifier).state = 2;
+                },
               ),
               const SizedBox(width: 8),
               StatTile(
@@ -233,18 +237,16 @@ class _HomeBody extends ConsumerWidget {
           SectionHeader(
             title: 'Up next',
             actionLabel: 'See all',
-            onAction: () =>
-                ref.read(tabIndexProvider.notifier).state = 1,
+            onAction: () => ref.read(tabIndexProvider.notifier).state = 1,
           ),
-          FutureBuilder<List<Task>>(
-            future: upNextFuture,
-            builder: (context, snap) {
-              final upNext = snap.data ?? const [];
+          upNextAsync.when(
+            data: (upNext) {
               if (upNext.isEmpty) {
                 return EmptyState(
                   icon: Icons.check_circle_outline,
                   title: 'Nothing urgent',
-                  body: 'No open tasks right now. Add one and it will show up here.',
+                  body:
+                      'No open tasks right now. Add one and it will show up here.',
                   actionLabel: 'Add a task',
                   onAction: () => showNewTaskSheet(context, orgId: orgId),
                 );
@@ -259,33 +261,28 @@ class _HomeBody extends ConsumerWidget {
                 ],
               );
             },
+            loading: () => const SizedBox.shrink(),
+            error: (_, _) => const SizedBox.shrink(),
           ),
           SectionHeader(
             title: 'Teams',
             actionLabel: 'See all',
-            onAction: () =>
-                ref.read(tabIndexProvider.notifier).state = 2,
+            onAction: () {
+              ref.read(teamsTabSubProvider.notifier).state = 'teams';
+              ref.read(tabIndexProvider.notifier).state = 2;
+            },
           ),
           if (teams.isEmpty)
             EmptyState(
               icon: Icons.group_outlined,
               title: 'No teams yet',
-              body: 'Create your first team to group people and tasks together.',
+              body:
+                  'Create your first team to group people and tasks together.',
               actionLabel: 'Create a team',
               onAction: () => showNewTeamSheet(context, orgId: orgId),
             )
           else
-            SizedBox(
-              height: 108,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: teams.length,
-                itemBuilder: (context, i) {
-                  final team = teams[i];
-                  return _TeamStripCard(team: team, orgId: orgId);
-                },
-              ),
-            ),
+            _TeamStrip(teams: teams, orgId: orgId),
         ],
       ],
     );
@@ -472,10 +469,7 @@ class _DialCardState extends State<_DialCard>
                             decoration: const BoxDecoration(
                               shape: BoxShape.circle,
                               gradient: RadialGradient(
-                                colors: [
-                                  Color(0xFFFFFFFF),
-                                  Color(0x00FFFFFF),
-                                ],
+                                colors: [Color(0xFFFFFFFF), Color(0x00FFFFFF)],
                               ),
                             ),
                           ),
@@ -511,6 +505,121 @@ class _HomeTaskCard extends ConsumerWidget {
             openTeamPage(context, team: team, orgId: task.orgId),
       ),
       onOpenPage: () => openTaskPage(context, task: task, orgId: task.orgId),
+    );
+  }
+}
+
+/// The horizontal team strip, rebuilt so it cannot claim vertical
+/// drags (1.3.0). A nested horizontal ListView pits its horizontal
+/// drag against the page's vertical drag: if the finger moves even
+/// slightly sideways first, the strip wins and the page never
+/// scrolls — which felt exactly like the app ignoring the swipe.
+/// This version is not a scrollable at all: a [Listener] watches the
+/// pointer and only drives the strip's position itself, and only
+/// once the movement is clearly horizontal (past 24px sideways and
+/// further sideways than down). Vertical swipes never touch it, so
+/// the page always scrolls. A fling at release keeps the strip
+/// feeling like a scroll view. Card taps are untouched.
+class _TeamStrip extends StatefulWidget {
+  final List<Team> teams;
+  final String orgId;
+  const _TeamStrip({required this.teams, required this.orgId});
+
+  @override
+  State<_TeamStrip> createState() => _TeamStripState();
+}
+
+class _TeamStripState extends State<_TeamStrip> {
+  final _controller = ScrollController();
+  Offset? _down;
+  Offset? _last;
+  DateTime? _lastTime;
+  bool _horizontal = false;
+  double _velocity = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onDown(PointerDownEvent e) {
+    _down = e.position;
+    _last = e.position;
+    _horizontal = false;
+    _velocity = 0;
+    _lastTime = DateTime.now();
+  }
+
+  void _onMove(PointerMoveEvent e) {
+    if (_down == null || _last == null || !_controller.hasClients) return;
+    final total = e.position - _down!;
+    if (!_horizontal) {
+      // Clearly horizontal only: past 24px sideways and further
+      // sideways than down. Anything else belongs to the page.
+      if (total.dx.abs() > 24 && total.dx.abs() > total.dy.abs() * 1.5) {
+        _horizontal = true;
+      } else if (total.dy.abs() > 24) {
+        // Clearly vertical: never claim it.
+        _down = null;
+        return;
+      } else {
+        return;
+      }
+    }
+    final dx = e.position.dx - _last!.dx;
+    final now = DateTime.now();
+    final dt = now.difference(_lastTime!).inMicroseconds / 1e6;
+    if (dt > 0) _velocity = dx / dt;
+    _lastTime = now;
+    _last = e.position;
+    final next = (_controller.offset - dx).clamp(
+      0.0,
+      _controller.position.maxScrollExtent,
+    );
+    _controller.jumpTo(next);
+  }
+
+  void _onUp(PointerUpEvent e) {
+    if (!_horizontal || !_controller.hasClients) return;
+    _horizontal = false;
+    // Fling: decay the release velocity over ~250 ms.
+    final v = _velocity;
+    if (v.abs() > 50) {
+      final target = (_controller.offset - v * 0.25).clamp(
+        0.0,
+        _controller.position.maxScrollExtent,
+      );
+      _controller.animateTo(
+        target,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.decelerate,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 108,
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: _onDown,
+        onPointerMove: _onMove,
+        onPointerUp: _onUp,
+        onPointerCancel: (_) => _horizontal = false,
+        child: SingleChildScrollView(
+          controller: _controller,
+          scrollDirection: Axis.horizontal,
+          physics: const NeverScrollableScrollPhysics(),
+          child: Row(
+            children: [
+              for (final team in widget.teams)
+                _TeamStripCard(team: team, orgId: widget.orgId),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -591,7 +700,11 @@ class _SearchResults extends ConsumerWidget {
   final String orgId;
   final String query;
   final VoidCallback onClear;
-  const _SearchResults({required this.orgId, required this.query, required this.onClear});
+  const _SearchResults({
+    required this.orgId,
+    required this.query,
+    required this.onClear,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -615,8 +728,7 @@ class _SearchResults extends ConsumerWidget {
           );
         }
         final teams = ref.watch(teamsProvider(orgId)).value ?? const [];
-        Team? teamOf(String? id) =>
-            teams.where((t) => t.id == id).firstOrNull;
+        Team? teamOf(String? id) => teams.where((t) => t.id == id).firstOrNull;
         // Search results are capped at 25 per section: the Home list is
         // a plain ListView, so an uncapped 200-person match would build
         // every card eagerly. The tab lists are lazy SliverLists; search
@@ -677,7 +789,13 @@ class _SearchResults extends ConsumerWidget {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Text(t.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                          child: Text(
+                            t.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                            ),
+                          ),
                         ),
                         Icon(Icons.chevron_right, color: context.muted),
                       ],
@@ -699,15 +817,31 @@ class _SearchResults extends ConsumerWidget {
                     ),
                     child: Row(
                       children: [
-                        PersonAvatar(person: p, ringColor: KeelTokens.noTeam, size: 40),
+                        PersonAvatar(
+                          person: p,
+                          ringColor: KeelTokens.noTeam,
+                          size: 40,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                              Text(
+                                p.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
                               if (p.roleTitle.isNotEmpty)
-                                Text(p.roleTitle, style: TextStyle(color: context.muted, fontSize: 13)),
+                                Text(
+                                  p.roleTitle,
+                                  style: TextStyle(
+                                    color: context.muted,
+                                    fontSize: 13,
+                                  ),
+                                ),
                             ],
                           ),
                         ),

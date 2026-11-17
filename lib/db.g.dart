@@ -3524,6 +3524,360 @@ class SubTodosCompanion extends UpdateCompanion<SubTodo> {
   }
 }
 
+class $DayNotesTable extends DayNotes with TableInfo<$DayNotesTable, DayNote> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DayNotesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _orgIdMeta = const VerificationMeta('orgId');
+  @override
+  late final GeneratedColumn<String> orgId = GeneratedColumn<String>(
+    'org_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES organizations (id)',
+    ),
+  );
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<String> date = GeneratedColumn<String>(
+    'date',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, orgId, date, note, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'day_notes';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DayNote> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('org_id')) {
+      context.handle(
+        _orgIdMeta,
+        orgId.isAcceptableOrUnknown(data['org_id']!, _orgIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_orgIdMeta);
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+        _dateMeta,
+        date.isAcceptableOrUnknown(data['date']!, _dateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_noteMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DayNote map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DayNote(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      orgId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}org_id'],
+      )!,
+      date: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}date'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $DayNotesTable createAlias(String alias) {
+    return $DayNotesTable(attachedDatabase, alias);
+  }
+}
+
+class DayNote extends DataClass implements Insertable<DayNote> {
+  final String id;
+  final String orgId;
+
+  /// The day, 'yyyy-MM-dd' in local time.
+  final String date;
+  final String note;
+  final DateTime updatedAt;
+  const DayNote({
+    required this.id,
+    required this.orgId,
+    required this.date,
+    required this.note,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['org_id'] = Variable<String>(orgId);
+    map['date'] = Variable<String>(date);
+    map['note'] = Variable<String>(note);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  DayNotesCompanion toCompanion(bool nullToAbsent) {
+    return DayNotesCompanion(
+      id: Value(id),
+      orgId: Value(orgId),
+      date: Value(date),
+      note: Value(note),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory DayNote.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DayNote(
+      id: serializer.fromJson<String>(json['id']),
+      orgId: serializer.fromJson<String>(json['orgId']),
+      date: serializer.fromJson<String>(json['date']),
+      note: serializer.fromJson<String>(json['note']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'orgId': serializer.toJson<String>(orgId),
+      'date': serializer.toJson<String>(date),
+      'note': serializer.toJson<String>(note),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  DayNote copyWith({
+    String? id,
+    String? orgId,
+    String? date,
+    String? note,
+    DateTime? updatedAt,
+  }) => DayNote(
+    id: id ?? this.id,
+    orgId: orgId ?? this.orgId,
+    date: date ?? this.date,
+    note: note ?? this.note,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  DayNote copyWithCompanion(DayNotesCompanion data) {
+    return DayNote(
+      id: data.id.present ? data.id.value : this.id,
+      orgId: data.orgId.present ? data.orgId.value : this.orgId,
+      date: data.date.present ? data.date.value : this.date,
+      note: data.note.present ? data.note.value : this.note,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DayNote(')
+          ..write('id: $id, ')
+          ..write('orgId: $orgId, ')
+          ..write('date: $date, ')
+          ..write('note: $note, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, orgId, date, note, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DayNote &&
+          other.id == this.id &&
+          other.orgId == this.orgId &&
+          other.date == this.date &&
+          other.note == this.note &&
+          other.updatedAt == this.updatedAt);
+}
+
+class DayNotesCompanion extends UpdateCompanion<DayNote> {
+  final Value<String> id;
+  final Value<String> orgId;
+  final Value<String> date;
+  final Value<String> note;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const DayNotesCompanion({
+    this.id = const Value.absent(),
+    this.orgId = const Value.absent(),
+    this.date = const Value.absent(),
+    this.note = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DayNotesCompanion.insert({
+    required String id,
+    required String orgId,
+    required String date,
+    required String note,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       orgId = Value(orgId),
+       date = Value(date),
+       note = Value(note),
+       updatedAt = Value(updatedAt);
+  static Insertable<DayNote> custom({
+    Expression<String>? id,
+    Expression<String>? orgId,
+    Expression<String>? date,
+    Expression<String>? note,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (orgId != null) 'org_id': orgId,
+      if (date != null) 'date': date,
+      if (note != null) 'note': note,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DayNotesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? orgId,
+    Value<String>? date,
+    Value<String>? note,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return DayNotesCompanion(
+      id: id ?? this.id,
+      orgId: orgId ?? this.orgId,
+      date: date ?? this.date,
+      note: note ?? this.note,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (orgId.present) {
+      map['org_id'] = Variable<String>(orgId.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<String>(date.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DayNotesCompanion(')
+          ..write('id: $id, ')
+          ..write('orgId: $orgId, ')
+          ..write('date: $date, ')
+          ..write('note: $note, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3537,6 +3891,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TeamMembersTable teamMembers = $TeamMembersTable(this);
   late final $TaskAssigneesTable taskAssignees = $TaskAssigneesTable(this);
   late final $SubTodosTable subTodos = $SubTodosTable(this);
+  late final $DayNotesTable dayNotes = $DayNotesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3552,6 +3907,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     teamMembers,
     taskAssignees,
     subTodos,
+    dayNotes,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -3695,6 +4051,25 @@ final class $$OrganizationsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$DayNotesTable, List<DayNote>> _dayNotesRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.dayNotes,
+    aliasName: $_aliasNameGenerator(db.organizations.id, db.dayNotes.orgId),
+  );
+
+  $$DayNotesTableProcessedTableManager get dayNotesRefs {
+    final manager = $$DayNotesTableTableManager(
+      $_db,
+      $_db.dayNotes,
+    ).filter((f) => f.orgId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_dayNotesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$OrganizationsTableFilterComposer
@@ -3792,6 +4167,31 @@ class $$OrganizationsTableFilterComposer
           }) => $$TeamsTableFilterComposer(
             $db: $db,
             $table: $db.teams,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> dayNotesRefs(
+    Expression<bool> Function($$DayNotesTableFilterComposer f) f,
+  ) {
+    final $$DayNotesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dayNotes,
+      getReferencedColumn: (t) => t.orgId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DayNotesTableFilterComposer(
+            $db: $db,
+            $table: $db.dayNotes,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -3927,6 +4327,31 @@ class $$OrganizationsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> dayNotesRefs<T extends Object>(
+    Expression<T> Function($$DayNotesTableAnnotationComposer a) f,
+  ) {
+    final $$DayNotesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.dayNotes,
+      getReferencedColumn: (t) => t.orgId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DayNotesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.dayNotes,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$OrganizationsTableTableManager
@@ -3946,6 +4371,7 @@ class $$OrganizationsTableTableManager
             bool peopleRefs,
             bool tasksRefs,
             bool teamsRefs,
+            bool dayNotesRefs,
           })
         > {
   $$OrganizationsTableTableManager(_$AppDatabase db, $OrganizationsTable table)
@@ -3996,13 +4422,19 @@ class $$OrganizationsTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({peopleRefs = false, tasksRefs = false, teamsRefs = false}) {
+              ({
+                peopleRefs = false,
+                tasksRefs = false,
+                teamsRefs = false,
+                dayNotesRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (peopleRefs) db.people,
                     if (tasksRefs) db.tasks,
                     if (teamsRefs) db.teams,
+                    if (dayNotesRefs) db.dayNotes,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -4070,6 +4502,27 @@ class $$OrganizationsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (dayNotesRefs)
+                        await $_getPrefetchedData<
+                          Organization,
+                          $OrganizationsTable,
+                          DayNote
+                        >(
+                          currentTable: table,
+                          referencedTable: $$OrganizationsTableReferences
+                              ._dayNotesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$OrganizationsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).dayNotesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.orgId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -4090,7 +4543,12 @@ typedef $$OrganizationsTableProcessedTableManager =
       $$OrganizationsTableUpdateCompanionBuilder,
       (Organization, $$OrganizationsTableReferences),
       Organization,
-      PrefetchHooks Function({bool peopleRefs, bool tasksRefs, bool teamsRefs})
+      PrefetchHooks Function({
+        bool peopleRefs,
+        bool tasksRefs,
+        bool teamsRefs,
+        bool dayNotesRefs,
+      })
     >;
 typedef $$ProfilesTableCreateCompanionBuilder =
     ProfilesCompanion Function({
@@ -8006,6 +8464,325 @@ typedef $$SubTodosTableProcessedTableManager =
       SubTodo,
       PrefetchHooks Function({bool taskId})
     >;
+typedef $$DayNotesTableCreateCompanionBuilder =
+    DayNotesCompanion Function({
+      required String id,
+      required String orgId,
+      required String date,
+      required String note,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$DayNotesTableUpdateCompanionBuilder =
+    DayNotesCompanion Function({
+      Value<String> id,
+      Value<String> orgId,
+      Value<String> date,
+      Value<String> note,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+final class $$DayNotesTableReferences
+    extends BaseReferences<_$AppDatabase, $DayNotesTable, DayNote> {
+  $$DayNotesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $OrganizationsTable _orgIdTable(_$AppDatabase db) =>
+      db.organizations.createAlias(
+        $_aliasNameGenerator(db.dayNotes.orgId, db.organizations.id),
+      );
+
+  $$OrganizationsTableProcessedTableManager get orgId {
+    final $_column = $_itemColumn<String>('org_id')!;
+
+    final manager = $$OrganizationsTableTableManager(
+      $_db,
+      $_db.organizations,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_orgIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$DayNotesTableFilterComposer
+    extends Composer<_$AppDatabase, $DayNotesTable> {
+  $$DayNotesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$OrganizationsTableFilterComposer get orgId {
+    final $$OrganizationsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orgId,
+      referencedTable: $db.organizations,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrganizationsTableFilterComposer(
+            $db: $db,
+            $table: $db.organizations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DayNotesTableOrderingComposer
+    extends Composer<_$AppDatabase, $DayNotesTable> {
+  $$DayNotesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$OrganizationsTableOrderingComposer get orgId {
+    final $$OrganizationsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orgId,
+      referencedTable: $db.organizations,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrganizationsTableOrderingComposer(
+            $db: $db,
+            $table: $db.organizations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DayNotesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DayNotesTable> {
+  $$DayNotesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$OrganizationsTableAnnotationComposer get orgId {
+    final $$OrganizationsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orgId,
+      referencedTable: $db.organizations,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrganizationsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.organizations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$DayNotesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DayNotesTable,
+          DayNote,
+          $$DayNotesTableFilterComposer,
+          $$DayNotesTableOrderingComposer,
+          $$DayNotesTableAnnotationComposer,
+          $$DayNotesTableCreateCompanionBuilder,
+          $$DayNotesTableUpdateCompanionBuilder,
+          (DayNote, $$DayNotesTableReferences),
+          DayNote,
+          PrefetchHooks Function({bool orgId})
+        > {
+  $$DayNotesTableTableManager(_$AppDatabase db, $DayNotesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DayNotesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DayNotesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DayNotesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> orgId = const Value.absent(),
+                Value<String> date = const Value.absent(),
+                Value<String> note = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DayNotesCompanion(
+                id: id,
+                orgId: orgId,
+                date: date,
+                note: note,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String orgId,
+                required String date,
+                required String note,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => DayNotesCompanion.insert(
+                id: id,
+                orgId: orgId,
+                date: date,
+                note: note,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$DayNotesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({orgId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (orgId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.orgId,
+                                referencedTable: $$DayNotesTableReferences
+                                    ._orgIdTable(db),
+                                referencedColumn: $$DayNotesTableReferences
+                                    ._orgIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$DayNotesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DayNotesTable,
+      DayNote,
+      $$DayNotesTableFilterComposer,
+      $$DayNotesTableOrderingComposer,
+      $$DayNotesTableAnnotationComposer,
+      $$DayNotesTableCreateCompanionBuilder,
+      $$DayNotesTableUpdateCompanionBuilder,
+      (DayNote, $$DayNotesTableReferences),
+      DayNote,
+      PrefetchHooks Function({bool orgId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -8030,4 +8807,6 @@ class $AppDatabaseManager {
       $$TaskAssigneesTableTableManager(_db, _db.taskAssignees);
   $$SubTodosTableTableManager get subTodos =>
       $$SubTodosTableTableManager(_db, _db.subTodos);
+  $$DayNotesTableTableManager get dayNotes =>
+      $$DayNotesTableTableManager(_db, _db.dayNotes);
 }

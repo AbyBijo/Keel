@@ -22,12 +22,10 @@ void openTeamPage(
       pageBuilder: (_, _, _) => TeamPage(teamId: team.id, orgId: orgId),
       transitionsBuilder: (_, animation, _, child) {
         // Apple-style push: slide in, previous page parallaxes slightly.
-        final slide = Tween<Offset>(
-          begin: const Offset(1, 0),
-          end: Offset.zero,
-        ).animate(
-          CurvedAnimation(parent: animation, curve: KeelTokens.easeOut),
-        );
+        final slide = Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+            .animate(
+              CurvedAnimation(parent: animation, curve: KeelTokens.easeOut),
+            );
         return SlideTransition(position: slide, child: child);
       },
       transitionDuration: KeelTokens.spring,
@@ -37,13 +35,25 @@ void openTeamPage(
 
 /// Teams tab: cards with coloured bar, Lead, progress, stacked avatars,
 /// arrow button. Tap card = overview sheet; tap arrow = full team page.
+///
+/// [scrollController] / [bottomPadding] let the merged Teams tab
+/// (1.3.0) embed this screen: it scrolls with the merged tab's
+/// controller and needs less bottom clearance, since the segmented
+/// control already sits above the tab bar.
 class TeamsScreen extends ConsumerWidget {
-  const TeamsScreen({super.key});
+  final ScrollController? scrollController;
+  final double bottomPadding;
+  const TeamsScreen({
+    super.key,
+    this.scrollController,
+    this.bottomPadding = 130,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final orgIdAsync = ref.watch(activeOrgProvider);
-    final scrollController = ref.watch(tabScrollControllersProvider)[2];
+    final controllers = ref.watch(tabScrollControllersProvider);
+    final scrollController = this.scrollController ?? controllers[2];
 
     return orgIdAsync.when(
       data: (orgId) {
@@ -95,7 +105,7 @@ class TeamsScreen extends ConsumerWidget {
             ),
             if (teams.isEmpty)
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 0, 18, 130),
+                padding: EdgeInsets.fromLTRB(18, 0, 18, bottomPadding),
                 sliver: SliverToBoxAdapter(
                   child: EmptyState(
                     icon: Icons.group_outlined,
@@ -109,7 +119,7 @@ class TeamsScreen extends ConsumerWidget {
               )
             else
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 0, 18, 130),
+                padding: EdgeInsets.fromLTRB(18, 0, 18, bottomPadding),
                 sliver: SliverList.builder(
                   itemCount: teams.length,
                   itemBuilder: (context, i) {
@@ -178,7 +188,9 @@ class _TeamCard extends ConsumerWidget {
                 ),
                 const SizedBox(height: 2),
                 FutureBuilder<Person?>(
-                  future: ref.read(repositoryProvider).getPerson(team.leaderPersonId),
+                  future: ref
+                      .read(repositoryProvider)
+                      .getPerson(team.leaderPersonId),
                   builder: (context, snap) => Text(
                     'Lead: ${snap.data?.name ?? '…'}',
                     style: TextStyle(color: context.muted, fontSize: 13),
@@ -191,9 +203,7 @@ class _TeamCard extends ConsumerWidget {
           ),
           const SizedBox(width: 10),
           AvatarStack(
-            members: members
-                .map((p) => (person: p, color: color))
-                .toList(),
+            members: members.map((p) => (person: p, color: color)).toList(),
           ),
           const SizedBox(width: 10),
           GestureDetector(
@@ -253,7 +263,11 @@ class TeamPage extends ConsumerWidget {
             pinned: false,
             backgroundColor: color,
             leading: IconButton(
-              icon: const Icon(Icons.chevron_left, color: Colors.white, size: 28),
+              icon: const Icon(
+                Icons.chevron_left,
+                color: Colors.white,
+                size: 28,
+              ),
               onPressed: () => Navigator.of(context).pop(),
               tooltip: 'Back to Teams',
             ),
@@ -263,7 +277,13 @@ class TeamPage extends ConsumerWidget {
                 tooltip: 'Team options',
                 onSelected: (value) async {
                   if (value == 'edit') {
-                    await _editTeam(context, ref, team, orgId);
+                    // 1.3.0: editing reuses the create-team sheet,
+                    // pre-filled (DECISIONS.md 37).
+                    await showNewTeamSheet(
+                      context,
+                      orgId: orgId,
+                      existing: team,
+                    );
                   } else if (value == 'delete') {
                     await _deleteTeam(context, ref, team);
                   }
@@ -333,25 +353,44 @@ class TeamPage extends ConsumerWidget {
                 ),
                 const SectionHeader(title: 'Leader'),
                 FutureBuilder<Person?>(
-                  future: ref.read(repositoryProvider).getPerson(team.leaderPersonId),
+                  future: ref
+                      .read(repositoryProvider)
+                      .getPerson(team.leaderPersonId),
                   builder: (context, snap) {
                     final leader = snap.data;
                     if (leader == null) {
                       return const KeelCard(child: Text('Loading leader…'));
                     }
                     return KeelCard(
-                      onTap: () => openPersonPage(context, person: leader, orgId: orgId),
+                      onTap: () =>
+                          openPersonPage(context, person: leader, orgId: orgId),
                       child: Row(
                         children: [
-                          PersonAvatar(person: leader, ringColor: color, size: 48),
+                          PersonAvatar(
+                            person: leader,
+                            ringColor: color,
+                            size: 48,
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(leader.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                                Text(
+                                  leader.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                  ),
+                                ),
                                 if (leader.roleTitle.isNotEmpty)
-                                  Text(leader.roleTitle, style: TextStyle(color: context.muted, fontSize: 13)),
+                                  Text(
+                                    leader.roleTitle,
+                                    style: TextStyle(
+                                      color: context.muted,
+                                      fontSize: 13,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -362,7 +401,11 @@ class TeamPage extends ConsumerWidget {
                               color: KeelTokens.tint14(color, context.card),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Icon(Icons.flag_outlined, color: color, size: 20),
+                            child: Icon(
+                              Icons.flag_outlined,
+                              color: color,
+                              size: 20,
+                            ),
                           ),
                         ],
                       ),
@@ -374,7 +417,9 @@ class TeamPage extends ConsumerWidget {
                     const Expanded(child: SectionHeader(title: 'People')),
                     TextButton.icon(
                       onPressed: () async {
-                        final all = await ref.read(repositoryProvider).getPeople(orgId);
+                        final all = await ref
+                            .read(repositoryProvider)
+                            .getPeople(orgId);
                         if (!context.mounted) return;
                         final ids = await pickPeople(
                           context,
@@ -406,7 +451,9 @@ class TeamPage extends ConsumerWidget {
                       },
                       icon: const Icon(Icons.add, size: 18),
                       label: const Text('Add / remove'),
-                      style: TextButton.styleFrom(foregroundColor: context.accent),
+                      style: TextButton.styleFrom(
+                        foregroundColor: context.accent,
+                      ),
                     ),
                   ],
                 ),
@@ -432,7 +479,10 @@ class TeamPage extends ConsumerWidget {
                   )
                 else
                   KeelCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
                     child: Column(
                       children: [
                         for (final m in members)
@@ -440,28 +490,56 @@ class TeamPage extends ConsumerWidget {
                             padding: const EdgeInsets.symmetric(vertical: 6),
                             child: Row(
                               children: [
-                                PersonAvatar(person: m, ringColor: color, size: 38),
+                                PersonAvatar(
+                                  person: m,
+                                  ringColor: color,
+                                  size: 38,
+                                ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: GestureDetector(
-                                    onTap: () => openPersonPage(context, person: m, orgId: orgId),
-                                    child: Text(m.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                                    onTap: () => openPersonPage(
+                                      context,
+                                      person: m,
+                                      orgId: orgId,
+                                    ),
+                                    child: Text(
+                                      m.name,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 16,
+                                      ),
+                                    ),
                                   ),
                                 ),
                                 Text(
                                   m.roleTitle,
-                                  style: TextStyle(color: context.muted, fontSize: 13),
+                                  style: TextStyle(
+                                    color: context.muted,
+                                    fontSize: 13,
+                                  ),
                                 ),
                                 const SizedBox(width: 8),
                                 if (m.id != team.leaderPersonId)
                                   IconButton(
-                                    icon: const Icon(Icons.remove_circle_outline, size: 20),
+                                    icon: const Icon(
+                                      Icons.remove_circle_outline,
+                                      size: 20,
+                                    ),
                                     color: context.muted,
                                     tooltip: 'Remove ${m.name} from team',
                                     onPressed: () async {
-                                      final all = await ref.read(repositoryProvider).getPeople(orgId);
+                                      final all = await ref
+                                          .read(repositoryProvider)
+                                          .getPeople(orgId);
                                       if (!context.mounted) return;
-                                      await _removeMemberWithLeaderCheck(context, ref, team, m.id, all);
+                                      await _removeMemberWithLeaderCheck(
+                                        context,
+                                        ref,
+                                        team,
+                                        m.id,
+                                        all,
+                                      );
                                     },
                                   ),
                               ],
@@ -474,11 +552,16 @@ class TeamPage extends ConsumerWidget {
                   children: [
                     const Expanded(child: SectionHeader(title: 'Tasks')),
                     TextButton.icon(
-                      onPressed: () =>
-                          showNewTaskSheet(context, orgId: orgId, presetTeamId: team.id),
+                      onPressed: () => showNewTaskSheet(
+                        context,
+                        orgId: orgId,
+                        presetTeamId: team.id,
+                      ),
                       icon: const Icon(Icons.add, size: 18),
                       label: const Text('Add task'),
-                      style: TextButton.styleFrom(foregroundColor: context.accent),
+                      style: TextButton.styleFrom(
+                        foregroundColor: context.accent,
+                      ),
                     ),
                   ],
                 ),
@@ -488,8 +571,11 @@ class TeamPage extends ConsumerWidget {
                     title: 'No tasks for this team',
                     body: 'Add a task here and it will belong to ${team.name}.',
                     actionLabel: 'Add a task',
-                    onAction: () =>
-                        showNewTaskSheet(context, orgId: orgId, presetTeamId: team.id),
+                    onAction: () => showNewTaskSheet(
+                      context,
+                      orgId: orgId,
+                      presetTeamId: team.id,
+                    ),
                   )
                 else
                   for (final t in teamTasks)
@@ -527,12 +613,18 @@ class TeamPage extends ConsumerWidget {
                                 } else {
                                   await repo.setMainTask(team.id, t.id);
                                   if (context.mounted) {
-                                    showKeelSnack(context, 'Main task set: ${t.title}');
+                                    showKeelSnack(
+                                      context,
+                                      'Main task set: ${t.title}',
+                                    );
                                   }
                                 }
                               },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 5,
+                                ),
                                 decoration: BoxDecoration(
                                   color: team.mainTaskId == t.id
                                       ? color
@@ -545,15 +637,21 @@ class TeamPage extends ConsumerWidget {
                                     Icon(
                                       Icons.flag_outlined,
                                       size: 13,
-                                      color: team.mainTaskId == t.id ? Colors.white : color,
+                                      color: team.mainTaskId == t.id
+                                          ? Colors.white
+                                          : color,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      team.mainTaskId == t.id ? 'Main task' : 'Set as main',
+                                      team.mainTaskId == t.id
+                                          ? 'Main task'
+                                          : 'Set as main',
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w700,
-                                        color: team.mainTaskId == t.id ? Colors.white : color,
+                                        color: team.mainTaskId == t.id
+                                            ? Colors.white
+                                            : color,
                                       ),
                                     ),
                                   ],
@@ -584,8 +682,7 @@ class TeamPage extends ConsumerWidget {
       await repo.removeTeamMember(team.id, personId);
     } on LeaderRemovalNeedsReplacement {
       // Rule 4: the leader is leaving — pick a new leader first.
-      final candidates =
-          all.where((p) => p.id != personId).toList();
+      final candidates = all.where((p) => p.id != personId).toList();
       if (!context.mounted) return;
       final replacement = await pickLeader(
         context,
@@ -601,60 +698,6 @@ class TeamPage extends ConsumerWidget {
         );
       }
     }
-  }
-
-  Future<void> _editTeam(
-    BuildContext context,
-    WidgetRef ref,
-    Team team,
-    String orgId,
-  ) async {
-    final name = TextEditingController(text: team.name);
-    var colorHex = team.colorHex;
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Edit team'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: name,
-                  autofocus: true,
-                  decoration: const InputDecoration(hintText: 'Team name'),
-                ),
-                const SizedBox(height: 16),
-                ColorPickerField(
-                  valueHex: colorHex,
-                  onChanged: (v) => setState(() => colorHex = v),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (saved == true && name.text.trim().isNotEmpty) {
-      await ref.read(repositoryProvider).updateTeam(
-            team.id,
-            name: name.text,
-            colorHex: colorHex,
-          );
-    }
-    name.dispose();
   }
 
   Future<void> _deleteTeam(

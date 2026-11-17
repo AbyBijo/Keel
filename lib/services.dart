@@ -7,12 +7,14 @@ import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
+import 'providers.dart';
 import 'repo.dart';
 
 // ---------------------------------------------------------------------------
@@ -251,12 +253,44 @@ class BackupService {
 }
 
 // ---------------------------------------------------------------------------
-// Local notifications — daily digest only. No network, no server.
+// Local notifications — daily digest + per-task reminders. No network,
+// no server. (1.3.0)
+//
+// Channels: the digest channel is 'keel_digest_v2' and the per-task
+// channel is 'keel_task', both high importance. The v1.2.0 digest
+// channel ('keel_digest') was created at default importance, and
+// Android never upgrades an existing channel's importance in place —
+// a new channel id is the only way the raise actually reaches a
+// phone that already has 1.2.0 installed. The old channel is left
+// unused (harmless); its scheduled notification is cancelled by id
+// whenever the digest is (re)scheduled.
+//
+// Digest freshness: flutter_local_notifications schedules fixed
+// content, so the counts can only be as fresh as the last time the
+// app ran. The digest therefore keeps its daily repeating schedule
+// (it never dies if the app is not opened) AND is re-scheduled with
+// fresh counts every time the app launches or resumes, and whenever
+// reminders are toggled or the digest time changes. For a daily
+// user the counts are fresh each morning; truly fresh-at-fire-time
+// counts would need a background executor (android_alarm_manager_plus)
+// — a bigger, riskier addition, deliberately not taken here.
+//
+// Per-task reminders: one-shot notifications, scheduled per task —
+// one on the due date, one the morning after (when it goes overdue).
+// IDs are derived from the task id with a stable hash (Dart's
+// String.hashCode is NOT stable across runs), so a reminder can be
+// cancelled later from any app launch. syncTaskReminders is
+// idempotent: re-scheduling the same id overwrites, and tasks that
+// are done, undated, or past their fire time get their reminders
+// cancelled instead. It runs on app resume (backstop) and after
+// every task create / edit / complete / delete.
 // ---------------------------------------------------------------------------
 
 class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _ready = false;
+
+  static const _digestId = 1001;
 
   static Future<void> init() async {
     tzdata.initializeTimeZones();
@@ -275,6 +309,20 @@ class NotificationService {
     return await android?.requestNotificationsPermission() ?? true;
   }
 
+  /// Digest counts for [orgId]: overdue, due soon, open.
+  static Future<({int overdue, int dueSoon, int open})> digestCounts(
+    KeelRepository repo,
+    String? orgId,
+  ) async {
+    if (orgId == null) return (overdue: 0, dueSoon: 0, open: 0);
+    final stats = await repo.homeStats(orgId);
+    return (
+      overdue: stats.overdue,
+      dueSoon: stats.dueSoon,
+      open: stats.total - stats.done,
+    );
+  }
+
   /// Schedule (or cancel) the daily digest at [hour]:[minute] local time.
   static Future<void> setDailyDigest({
     required bool on,
@@ -284,7 +332,7 @@ class NotificationService {
     counts,
   }) async {
     if (!_ready) return;
-    await _plugin.cancel(1001);
+    await _plugin.cancel(_digestId);
     if (!on) return;
     final now = tz.TZDateTime.now(tz.local);
     var at = tz.TZDateTime(
@@ -301,21 +349,149 @@ class NotificationService {
         ? '${c.overdue} overdue · ${c.dueSoon} due soon · ${c.open} open tasks'
         : '${c.dueSoon} due soon · ${c.open} open tasks';
     await _plugin.zonedSchedule(
-      1001,
+      _digestId,
       'Keel — today',
       body,
       at,
       const NotificationDetails(
         android: AndroidNotificationDetails(
-          'keel_digest',
+          'keel_digest_v2',
           'Daily digest',
           channelDescription: 'Daily summary of due and overdue tasks',
-          importance: Importance.defaultImportance,
-          priority: Priority.defaultPriority,
+          importance: Importance.high,
+          priority: Priority.high,
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       matchDateTimeComponents: DateTimeComponents.time,
+    );
+  }
+
+  /// Stable 32-bit FNV-1a hash of a string. Dart's String.hashCode is
+  /// not stable across runs, so notification ids derived from it could
+  /// not be cancelled after a restart.
+  static int _stableHash(String s) {
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++) {
+      h ^= s.codeUnitAt(i);
+      h = (h * 16777619) & 0xFFFFFFFF;
+    }
+    return h;
+  }
+
+  /// Notification id for the due-date reminder of a task.
+  static int dueReminderId(String taskId) =>
+      0x10000000 | (_stableHash(taskId) & 0x0FFFFFFF);
+
+  /// Notification id for the overdue reminder of a task.
+  static int overdueReminderId(String taskId) =>
+      0x20000000 | (_stableHash(taskId) & 0x0FFFFFFF);
+
+  /// Cancel both per-task reminders for one task (on complete/delete).
+  static Future<void> cancelTaskReminders(String taskId) async {
+    if (!_ready) return;
+    await _plugin.cancel(dueReminderId(taskId));
+    await _plugin.cancel(overdueReminderId(taskId));
+  }
+
+  /// Reconcile every per-task reminder for the active org with the
+  /// current tasks. Idempotent: scheduling the same id overwrites the
+  /// old one, so a changed due date just moves the reminder; done,
+  /// undated, or past-due reminders are cancelled. Reminders fire at
+  /// the digest time ([hour]:[minute]): the due-date one on the due
+  /// day, the overdue one the morning after. A fire time already in
+  /// the past is skipped, never fired immediately.
+  static Future<void> syncTaskReminders({
+    required KeelRepository repo,
+    required String? orgId,
+    required bool on,
+    required int hour,
+    required int minute,
+  }) async {
+    if (!_ready || orgId == null) return;
+    final tasks = await repo.getTasks(orgId);
+    final now = tz.TZDateTime.now(tz.local);
+    for (final task in tasks) {
+      final due = task.dueDate;
+      if (!on || task.isDone || due == null) {
+        await cancelTaskReminders(task.id);
+        continue;
+      }
+      final day = DateTime(due.year, due.month, due.day);
+      final dueAt = tz.TZDateTime(
+        tz.local,
+        day.year,
+        day.month,
+        day.day,
+        hour,
+        minute,
+      );
+      if (!dueAt.isBefore(now)) {
+        await _plugin.zonedSchedule(
+          dueReminderId(task.id),
+          'Due today',
+          task.title,
+          dueAt,
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'keel_task',
+              'Task reminders',
+              channelDescription: 'Reminders for tasks due today or overdue',
+              importance: Importance.high,
+              priority: Priority.high,
+            ),
+          ),
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        );
+      } else {
+        // Due time already passed today: no due reminder (the
+        // overdue one tomorrow still fires).
+        await _plugin.cancel(dueReminderId(task.id));
+      }
+      final overdueAt = dueAt.add(const Duration(days: 1));
+      if (!overdueAt.isBefore(now)) {
+        await _plugin.zonedSchedule(
+          overdueReminderId(task.id),
+          'Overdue',
+          task.title,
+          overdueAt,
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'keel_task',
+              'Task reminders',
+              channelDescription: 'Reminders for tasks due today or overdue',
+              importance: Importance.high,
+              priority: Priority.high,
+            ),
+          ),
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        );
+      } else {
+        await _plugin.cancel(overdueReminderId(task.id));
+      }
+    }
+  }
+
+  /// Reconcile ALL notifications for the active org from a WidgetRef:
+  /// the daily digest (fresh counts) and every per-task reminder.
+  /// Call after any task change and when the app resumes — it is the
+  /// backstop that keeps reminders from going stale or leaking.
+  static Future<void> syncForRef(WidgetRef ref) async {
+    final settings = ref.read(settingsProvider);
+    final orgId = ref.read(activeOrgProvider).value;
+    final repo = ref.read(repositoryProvider);
+    await setDailyDigest(
+      on: settings.remindersOn,
+      hour: settings.digestHour,
+      minute: settings.digestMinute,
+      counts: () => digestCounts(repo, orgId),
+    );
+    await syncTaskReminders(
+      repo: repo,
+      orgId: orgId,
+      on: settings.remindersOn,
+      hour: settings.digestHour,
+      minute: settings.digestMinute,
     );
   }
 }

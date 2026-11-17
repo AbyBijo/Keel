@@ -71,8 +71,8 @@ void main() {
     expect(find.text('0 of 0 tasks done'), findsOneWidget);
     expect(find.text('Nothing urgent'), findsOneWidget);
     expect(find.text('No teams yet'), findsOneWidget);
-    // Tab bar with all five tabs.
-    for (final label in ['Home', 'Tasks', 'Teams', 'People', 'Settings']) {
+    // Tab bar with all five tabs (1.3.0: Calendar took People's spot).
+    for (final label in ['Home', 'Tasks', 'Teams', 'Calendar', 'Settings']) {
       expect(find.text(label), findsWidgets);
     }
     await unmountKeel(tester);

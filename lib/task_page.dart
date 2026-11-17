@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -23,12 +25,10 @@ void openTaskPage(
     PageRouteBuilder(
       pageBuilder: (_, _, _) => TaskPage(taskId: task.id, orgId: orgId),
       transitionsBuilder: (_, animation, _, child) {
-        final slide = Tween<Offset>(
-          begin: const Offset(1, 0),
-          end: Offset.zero,
-        ).animate(
-          CurvedAnimation(parent: animation, curve: KeelTokens.easeOut),
-        );
+        final slide = Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+            .animate(
+              CurvedAnimation(parent: animation, curve: KeelTokens.easeOut),
+            );
         return SlideTransition(position: slide, child: child);
       },
       transitionDuration: KeelTokens.spring,
@@ -69,7 +69,10 @@ class TaskPage extends ConsumerWidget {
           onPressed: () => Navigator.of(context).pop(),
           tooltip: 'Back to Tasks',
         ),
-        title: Text('Tasks', style: TextStyle(color: context.accent, fontSize: 17)),
+        title: Text(
+          'Tasks',
+          style: TextStyle(color: context.accent, fontSize: 17),
+        ),
         centerTitle: false,
         actions: [
           PopupMenuButton<String>(
@@ -106,7 +109,10 @@ class TaskPage extends ConsumerWidget {
                 semanticLabel: task.isDone
                     ? 'Mark "${task.title}" not done'
                     : 'Mark "${task.title}" done',
-                onChanged: (done) => repo.setTaskDone(task.id, done),
+                onChanged: (done) async {
+                  await repo.setTaskDone(task.id, done);
+                  unawaited(NotificationService.syncForRef(ref));
+                },
               ),
               const SizedBox(width: 4),
               Expanded(
@@ -119,8 +125,7 @@ class TaskPage extends ConsumerWidget {
                     height: 1.1,
                     letterSpacing: -0.6,
                     color: context.ink,
-                    decoration:
-                        task.isDone ? TextDecoration.lineThrough : null,
+                    decoration: task.isDone ? TextDecoration.lineThrough : null,
                     decorationColor: context.muted,
                   ),
                 ),
@@ -145,12 +150,12 @@ class TaskPage extends ConsumerWidget {
                   value: task.dueDate == null
                       ? 'No due date'
                       : '${dueLabel(task.dueDate, isDone: task.isDone)} · '
-                          '${task.dueDate!.day}/${task.dueDate!.month}/${task.dueDate!.year}',
+                            '${task.dueDate!.day}/${task.dueDate!.month}/${task.dueDate!.year}',
                   valueColor: overdue
                       ? KeelTokens.overdue
                       : dueSoon
-                          ? KeelTokens.colorFromHex('#B7791F')
-                          : null,
+                      ? KeelTokens.colorFromHex('#B7791F')
+                      : null,
                 ),
                 _DetailRow(
                   icon: Icons.flag_outlined,
@@ -158,7 +163,7 @@ class TaskPage extends ConsumerWidget {
                   value: task.priority == 'none'
                       ? 'None'
                       : task.priority[0].toUpperCase() +
-                          task.priority.substring(1),
+                            task.priority.substring(1),
                 ),
                 if (team != null)
                   _DetailRow(
@@ -166,11 +171,8 @@ class TaskPage extends ConsumerWidget {
                     label: 'Team',
                     value: team.name,
                     valueColor: KeelTokens.colorFromHex(team.colorHex),
-                    onTap: () => openTeamPage(
-                      context,
-                      team: team,
-                      orgId: orgId,
-                    ),
+                    onTap: () =>
+                        openTeamPage(context, team: team, orgId: orgId),
                   )
                 else
                   const _DetailRow(
@@ -219,8 +221,10 @@ class TaskPage extends ConsumerWidget {
                     ),
                   )
                 : KeelCard(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
                     child: Column(
                       children: [
                         for (final s in subs)
@@ -279,8 +283,10 @@ class TaskPage extends ConsumerWidget {
                     ),
                   )
                 : KeelCard(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
                     child: Column(
                       children: [
                         for (final p in people)
@@ -398,13 +404,28 @@ class TaskPage extends ConsumerWidget {
     );
     if (confirmed != true) return;
     final repo = ref.read(repositoryProvider);
+    // Settings captured now: the undo closure runs after this page
+    // is popped, so it must not touch ref.
+    final settings = ref.read(settingsProvider);
     final snap = await repo.deleteTask(task.id);
+    unawaited(NotificationService.cancelTaskReminders(task.id));
     if (context.mounted) {
       Navigator.of(context).pop();
       showUndoSnack(
         context,
         label: 'Task deleted',
-        onUndo: () => repo.restoreSnapshot(snap),
+        onUndo: () async {
+          await repo.restoreSnapshot(snap);
+          unawaited(
+            NotificationService.syncTaskReminders(
+              repo: repo,
+              orgId: task.orgId,
+              on: settings.remindersOn,
+              hour: settings.digestHour,
+              minute: settings.digestMinute,
+            ),
+          );
+        },
       );
     }
   }

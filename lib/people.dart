@@ -24,12 +24,10 @@ void openPersonPage(
     PageRouteBuilder(
       pageBuilder: (_, _, _) => PersonPage(personId: person.id, orgId: orgId),
       transitionsBuilder: (_, animation, _, child) {
-        final slide = Tween<Offset>(
-          begin: const Offset(1, 0),
-          end: Offset.zero,
-        ).animate(
-          CurvedAnimation(parent: animation, curve: KeelTokens.easeOut),
-        );
+        final slide = Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+            .animate(
+              CurvedAnimation(parent: animation, curve: KeelTokens.easeOut),
+            );
         return SlideTransition(position: slide, child: child);
       },
       transitionDuration: KeelTokens.spring,
@@ -38,8 +36,19 @@ void openPersonPage(
 }
 
 /// People tab: live search (name, role, phone, email, team), contacts list.
+///
+/// [scrollController] / [bottomPadding] let the merged Teams tab
+/// (1.3.0) embed this screen: it scrolls with the merged tab's
+/// controller ([2], not the old People tab's [3], which now belongs
+/// to Calendar) and needs less bottom clearance.
 class PeopleScreen extends ConsumerStatefulWidget {
-  const PeopleScreen({super.key});
+  final ScrollController? scrollController;
+  final double bottomPadding;
+  const PeopleScreen({
+    super.key,
+    this.scrollController,
+    this.bottomPadding = 130,
+  });
 
   @override
   ConsumerState<PeopleScreen> createState() => _PeopleScreenState();
@@ -58,15 +67,17 @@ class _PeopleScreenState extends ConsumerState<PeopleScreen> {
   @override
   Widget build(BuildContext context) {
     final orgIdAsync = ref.watch(activeOrgProvider);
-    final scrollController = ref.watch(tabScrollControllersProvider)[3];
+    final controllers = ref.watch(tabScrollControllersProvider);
+    final scrollController = widget.scrollController ?? controllers[3];
 
     return orgIdAsync.when(
       data: (orgId) {
         if (orgId == null) return const SizedBox.shrink();
         final peopleAsync = ref.watch(peopleProvider(orgId));
         final people = peopleAsync.value ?? const [];
-        final filteredAsync =
-            ref.watch(filteredPeopleProvider((orgId: orgId, query: _query)));
+        final filteredAsync = ref.watch(
+          filteredPeopleProvider((orgId: orgId, query: _query)),
+        );
         final shown = filteredAsync.value ?? const [];
         final filtering = filteredAsync is AsyncLoading;
 
@@ -138,7 +149,7 @@ class _PeopleScreenState extends ConsumerState<PeopleScreen> {
             ),
             if (people.isEmpty)
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 0, 18, 130),
+                padding: EdgeInsets.fromLTRB(18, 0, 18, widget.bottomPadding),
                 sliver: SliverToBoxAdapter(
                   child: EmptyState(
                     icon: Icons.person_add_outlined,
@@ -159,7 +170,7 @@ class _PeopleScreenState extends ConsumerState<PeopleScreen> {
               )
             else if (shown.isEmpty)
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 0, 18, 130),
+                padding: EdgeInsets.fromLTRB(18, 0, 18, widget.bottomPadding),
                 sliver: SliverToBoxAdapter(
                   child: EmptyState(
                     icon: Icons.person_search_outlined,
@@ -173,7 +184,7 @@ class _PeopleScreenState extends ConsumerState<PeopleScreen> {
               )
             else
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 0, 18, 130),
+                padding: EdgeInsets.fromLTRB(18, 0, 18, widget.bottomPadding),
                 sliver: SliverList.builder(
                   itemCount: shown.length,
                   itemBuilder: (context, i) {
@@ -203,22 +214,39 @@ class _PersonRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final teams = ref.watch(personTeamsProvider(person.id)).value ?? const [];
     return KeelCard(
-      onTap: () => showPersonOverviewSheet(context, person: person, orgId: orgId),
+      onTap: () =>
+          showPersonOverviewSheet(context, person: person, orgId: orgId),
       semanticLabel: 'Person: ${person.name}',
       child: Row(
         children: [
-          PersonAvatar(person: person, ringColor: firstTeamColor(teams), size: 48),
+          PersonAvatar(
+            person: person,
+            ringColor: firstTeamColor(teams),
+            size: 48,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(person.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                Text(
+                  person.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
                 if (person.roleTitle.isNotEmpty)
-                  Text(person.roleTitle, style: TextStyle(color: context.muted, fontSize: 13)),
+                  Text(
+                    person.roleTitle,
+                    style: TextStyle(color: context.muted, fontSize: 13),
+                  ),
                 const SizedBox(height: 4),
                 if (teams.isEmpty)
-                  Text('No team', style: TextStyle(color: context.muted, fontSize: 12))
+                  Text(
+                    'No team',
+                    style: TextStyle(color: context.muted, fontSize: 12),
+                  )
                 else
                   Wrap(
                     spacing: 6,
@@ -240,7 +268,8 @@ class _PersonRow extends ConsumerWidget {
             button: true,
             label: 'Open full profile for ${person.name}',
             child: GestureDetector(
-              onTap: () => openPersonPage(context, person: person, orgId: orgId),
+              onTap: () =>
+                  openPersonPage(context, person: person, orgId: orgId),
               behavior: HitTestBehavior.opaque,
               child: Container(
                 width: 44,
@@ -294,10 +323,17 @@ class _PersonPageState extends ConsumerState<PersonPage> {
   }
 
   Future<void> _launch(String scheme, String value, String label) async {
+    // Launch directly and check the result instead of gating on
+    // canLaunchUrl, which false-negatives on Android 11+ without a
+    // matching <queries> declaration (see AndroidManifest).
     final uri = Uri.parse('$scheme:$value');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else if (mounted) {
+    bool opened = false;
+    try {
+      opened = await launchUrl(uri);
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened && mounted) {
       showKeelSnack(context, 'Could not open $label.');
     }
   }
@@ -333,7 +369,10 @@ class _PersonPageState extends ConsumerState<PersonPage> {
           onPressed: () => Navigator.of(context).pop(),
           tooltip: 'Back to People',
         ),
-        title: Text('People', style: TextStyle(color: context.accent, fontSize: 17)),
+        title: Text(
+          'People',
+          style: TextStyle(color: context.accent, fontSize: 17),
+        ),
         centerTitle: false,
         actions: [
           PopupMenuButton<String>(
@@ -341,7 +380,13 @@ class _PersonPageState extends ConsumerState<PersonPage> {
             tooltip: 'Person options',
             onSelected: (value) async {
               if (value == 'edit') {
-                await _editPerson(context, ref, person);
+                // 1.3.0: editing reuses the create-person sheet,
+                // pre-filled (DECISIONS.md 37).
+                await showNewPersonSheet(
+                  context,
+                  orgId: widget.orgId,
+                  existing: person,
+                );
               } else if (value == 'delete') {
                 await _deletePerson(context, ref, person);
               }
@@ -381,7 +426,11 @@ class _PersonPageState extends ConsumerState<PersonPage> {
                         color: context.ink,
                         border: Border.all(color: context.bg, width: 3),
                       ),
-                      child: Icon(Icons.camera_alt, size: 15, color: context.bg),
+                      child: Icon(
+                        Icons.camera_alt,
+                        size: 15,
+                        color: context.bg,
+                      ),
                     ),
                   ),
                 ),
@@ -487,7 +536,11 @@ class _PersonPageState extends ConsumerState<PersonPage> {
                     color: KeelTokens.colorFromHex(t.colorHex),
                     leading: GestureDetector(
                       onTap: () => _removeFromTeam(context, ref, t.id),
-                      child: const Icon(Icons.close, size: 13, color: Colors.white),
+                      child: const Icon(
+                        Icons.close,
+                        size: 13,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ActionChip(
@@ -515,7 +568,11 @@ class _PersonPageState extends ConsumerState<PersonPage> {
               Expanded(
                 child: Text(
                   'Assigned tasks (${assignedTasks.length})',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.muted),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: context.muted,
+                  ),
                 ),
               ),
               TextButton.icon(
@@ -523,8 +580,9 @@ class _PersonPageState extends ConsumerState<PersonPage> {
                   final tasks = await repo.getTasks(widget.orgId);
                   if (!context.mounted) return;
                   final assignedIds = assignedTasks.map((t) => t.id).toSet();
-                  final unassigned =
-                      tasks.where((t) => !assignedIds.contains(t.id)).toList();
+                  final unassigned = tasks
+                      .where((t) => !assignedIds.contains(t.id))
+                      .toList();
                   if (unassigned.isEmpty) {
                     showKeelSnack(context, 'No unassigned tasks to add.');
                     return;
@@ -585,11 +643,8 @@ class _PersonPageState extends ConsumerState<PersonPage> {
                     context,
                     task: t,
                     orgId: widget.orgId,
-                    onOpenTeamPage: (team) => openTeamPage(
-                      context,
-                      team: team,
-                      orgId: widget.orgId,
-                    ),
+                    onOpenTeamPage: (team) =>
+                        openTeamPage(context, team: team, orgId: widget.orgId),
                   ),
                   onOpenPage: () =>
                       openTaskPage(context, task: t, orgId: widget.orgId),
@@ -599,7 +654,12 @@ class _PersonPageState extends ConsumerState<PersonPage> {
             const SizedBox(height: 16),
             const _SectionLabel('Notes'),
             const SizedBox(height: 8),
-            KeelCard(child: Text(person.notes, style: const TextStyle(fontSize: 15, height: 1.4))),
+            KeelCard(
+              child: Text(
+                person.notes,
+                style: const TextStyle(fontSize: 15, height: 1.4),
+              ),
+            ),
           ],
         ],
       ),
@@ -615,7 +675,12 @@ class _PersonPageState extends ConsumerState<PersonPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Photo', style: Theme.of(context).textTheme.displayMedium?.copyWith(fontSize: 22)),
+            Text(
+              'Photo',
+              style: Theme.of(
+                context,
+              ).textTheme.displayMedium?.copyWith(fontSize: 22),
+            ),
             const SizedBox(height: 14),
             KeelButton(
               label: 'Take a photo',
@@ -652,7 +717,10 @@ class _PersonPageState extends ConsumerState<PersonPage> {
     }
   }
 
-  Future<void> _addContact(BuildContext context, {required bool isPhone}) async {
+  Future<void> _addContact(
+    BuildContext context, {
+    required bool isPhone,
+  }) async {
     final value = TextEditingController();
     final label = TextEditingController(text: isPhone ? 'mobile' : 'work');
     final saved = await showDialog<bool>(
@@ -664,13 +732,17 @@ class _PersonPageState extends ConsumerState<PersonPage> {
           children: [
             TextField(
               controller: label,
-              decoration: const InputDecoration(hintText: 'Label (mobile, work…)'),
+              decoration: const InputDecoration(
+                hintText: 'Label (mobile, work…)',
+              ),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: value,
               autofocus: true,
-              keyboardType: isPhone ? TextInputType.phone : TextInputType.emailAddress,
+              keyboardType: isPhone
+                  ? TextInputType.phone
+                  : TextInputType.emailAddress,
               decoration: InputDecoration(
                 hintText: isPhone ? 'Phone number' : 'Email address',
               ),
@@ -706,7 +778,11 @@ class _PersonPageState extends ConsumerState<PersonPage> {
     }
   }
 
-  Future<void> _removeFromTeam(BuildContext context, WidgetRef ref, String teamId) async {
+  Future<void> _removeFromTeam(
+    BuildContext context,
+    WidgetRef ref,
+    String teamId,
+  ) async {
     final repo = ref.read(repositoryProvider);
     final team = await repo.getTeam(teamId);
     if (team == null) return;
@@ -714,8 +790,7 @@ class _PersonPageState extends ConsumerState<PersonPage> {
       await repo.removeTeamMember(teamId, widget.personId);
     } on LeaderRemovalNeedsReplacement {
       final members = await repo.getTeamMembers(teamId);
-      final candidates =
-          members.where((p) => p.id != widget.personId).toList();
+      final candidates = members.where((p) => p.id != widget.personId).toList();
       if (!context.mounted) return;
       final replacement = await pickLeader(
         context,
@@ -733,59 +808,6 @@ class _PersonPageState extends ConsumerState<PersonPage> {
     }
   }
 
-  Future<void> _editPerson(
-    BuildContext context,
-    WidgetRef ref,
-    Person person,
-  ) async {
-    final name = TextEditingController(text: person.name);
-    final role = TextEditingController(text: person.roleTitle);
-    final notes = TextEditingController(text: person.notes);
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit person'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: name, decoration: const InputDecoration(hintText: 'Name')),
-              const SizedBox(height: 10),
-              TextField(controller: role, decoration: const InputDecoration(hintText: 'Role')),
-              const SizedBox(height: 10),
-              TextField(
-                controller: notes,
-                maxLines: 3,
-                decoration: const InputDecoration(hintText: 'Notes'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (saved == true && name.text.trim().isNotEmpty) {
-      await ref.read(repositoryProvider).updatePerson(
-            person.id,
-            name: name.text,
-            roleTitle: role.text,
-            notes: notes.text,
-          );
-    }
-    name.dispose();
-    role.dispose();
-    notes.dispose();
-  }
-
   Future<void> _deletePerson(
     BuildContext context,
     WidgetRef ref,
@@ -793,9 +815,9 @@ class _PersonPageState extends ConsumerState<PersonPage> {
   ) async {
     final repo = ref.read(repositoryProvider);
     // Rule 4: if they lead teams, pick replacements first.
-    final ledTeams = (await repo.getTeams(widget.orgId))
-        .where((t) => t.leaderPersonId == person.id)
-        .toList();
+    final ledTeams = (await repo.getTeams(
+      widget.orgId,
+    )).where((t) => t.leaderPersonId == person.id).toList();
     final replacements = <String, String>{};
     for (final team in ledTeams) {
       final members = await repo.getTeamMembers(team.id);
@@ -859,13 +881,17 @@ class _PersonPageState extends ConsumerState<PersonPage> {
 }
 
 // Providers for the person's contact lists (thin wrappers over repo streams).
-final watchPhonesProvider =
-    StreamProvider.family<List<PersonPhone>, String>((ref, personId) {
+final watchPhonesProvider = StreamProvider.family<List<PersonPhone>, String>((
+  ref,
+  personId,
+) {
   return ref.watch(repositoryProvider).watchPhones(personId);
 });
 
-final watchEmailsProvider =
-    StreamProvider.family<List<PersonEmail>, String>((ref, personId) {
+final watchEmailsProvider = StreamProvider.family<List<PersonEmail>, String>((
+  ref,
+  personId,
+) {
   return ref.watch(repositoryProvider).watchEmails(personId);
 });
 
@@ -877,7 +903,11 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.muted),
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: context.muted,
+      ),
     );
   }
 }
@@ -886,7 +916,11 @@ class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
-  const _ActionButton({required this.icon, required this.label, required this.onTap});
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -941,7 +975,10 @@ class _ContactRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: TextStyle(color: context.muted, fontSize: 12)),
+                  Text(
+                    label,
+                    style: TextStyle(color: context.muted, fontSize: 12),
+                  ),
                   Text(value, style: const TextStyle(fontSize: 15)),
                 ],
               ),

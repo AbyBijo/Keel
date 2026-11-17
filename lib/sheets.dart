@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'db.dart';
@@ -45,7 +48,10 @@ class SheetScaffold extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(title, style: Theme.of(context).textTheme.displayMedium),
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.displayMedium,
+                ),
               ),
               IconButton(
                 onPressed: () => Navigator.of(context).pop(),
@@ -57,10 +63,7 @@ class SheetScaffold extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: ListView(
-              controller: scrollController,
-              children: [child],
-            ),
+            child: ListView(controller: scrollController, children: [child]),
           ),
           const SizedBox(height: 12),
           KeelButton(label: buttonLabel, onPressed: onButton),
@@ -135,14 +138,20 @@ class _ColorPickerFieldState extends State<ColorPickerField> {
                       decoration: BoxDecoration(
                         color: preset,
                         borderRadius: BorderRadius.circular(13),
-                        border: widget.valueHex.toUpperCase() ==
+                        border:
+                            widget.valueHex.toUpperCase() ==
                                 KeelTokens.hexOf(preset).toUpperCase()
                             ? Border.all(color: context.ink, width: 2.5)
                             : null,
                       ),
-                      child: widget.valueHex.toUpperCase() ==
+                      child:
+                          widget.valueHex.toUpperCase() ==
                               KeelTokens.hexOf(preset).toUpperCase()
-                          ? const Icon(Icons.check, color: Colors.white, size: 20)
+                          ? const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 20,
+                            )
                           : null,
                     ),
                   ),
@@ -164,9 +173,8 @@ class _ColorPickerFieldState extends State<ColorPickerField> {
           label: 'Hue',
           value: hsl.hue,
           max: 360,
-          onChanged: (v) => widget.onChanged(
-            KeelTokens.hexOf(hsl.withHue(v).toColor()),
-          ),
+          onChanged: (v) =>
+              widget.onChanged(KeelTokens.hexOf(hsl.withHue(v).toColor())),
         ),
         _SliderRow(
           label: 'Lightness',
@@ -187,7 +195,9 @@ class _ColorPickerFieldState extends State<ColorPickerField> {
               final hex = v.trim();
               if (RegExp(r'^#?[0-9A-Fa-f]{6}$').hasMatch(hex)) {
                 widget.onChanged(
-                  hex.startsWith('#') ? hex.toUpperCase() : '#${hex.toUpperCase()}',
+                  hex.startsWith('#')
+                      ? hex.toUpperCase()
+                      : '#${hex.toUpperCase()}',
                 );
               } else {
                 _hex.text = widget.valueHex;
@@ -219,7 +229,10 @@ class _SliderRow extends StatelessWidget {
       children: [
         SizedBox(
           width: 74,
-          child: Text(label, style: TextStyle(color: context.muted, fontSize: 13)),
+          child: Text(
+            label,
+            style: TextStyle(color: context.muted, fontSize: 13),
+          ),
         ),
         Expanded(
           child: Slider(
@@ -285,11 +298,20 @@ class _PeoplePickerSheetState extends ConsumerState<_PeoplePickerSheet> {
         Row(
           children: [
             Expanded(
-              child: Text(widget.title, style: Theme.of(context).textTheme.displayMedium),
+              child: Text(
+                widget.title,
+                style: Theme.of(context).textTheme.displayMedium,
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(_sel.toList()),
-              child: Text('Done', style: TextStyle(color: context.accent, fontWeight: FontWeight.w700)),
+              child: Text(
+                'Done',
+                style: TextStyle(
+                  color: context.accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ],
         ),
@@ -309,7 +331,9 @@ class _PeoplePickerSheetState extends ConsumerState<_PeoplePickerSheet> {
               final q = _search.text.trim().toLowerCase();
               final shown = q.isEmpty
                   ? people
-                  : people.where((p) => p.name.toLowerCase().contains(q)).toList();
+                  : people
+                        .where((p) => p.name.toLowerCase().contains(q))
+                        .toList();
               if (shown.isEmpty) {
                 return const EmptyState(
                   icon: Icons.person_search_outlined,
@@ -323,7 +347,8 @@ class _PeoplePickerSheetState extends ConsumerState<_PeoplePickerSheet> {
                 itemCount: shown.length,
                 itemBuilder: (context, i) {
                   final p = shown[i];
-                  final teams = ref.watch(personTeamsProvider(p.id)).value ?? const [];
+                  final teams =
+                      ref.watch(personTeamsProvider(p.id)).value ?? const [];
                   return _PersonRow(
                     person: p,
                     ringColor: firstTeamColor(teams),
@@ -340,7 +365,8 @@ class _PeoplePickerSheetState extends ConsumerState<_PeoplePickerSheet> {
               );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, _) => const Center(child: Text('Could not load people.')),
+            error: (_, _) =>
+                const Center(child: Text('Could not load people.')),
           ),
         ),
       ],
@@ -375,9 +401,18 @@ class _PersonRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(person.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                Text(
+                  person.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
+                ),
                 if (person.roleTitle.isNotEmpty)
-                  Text(person.roleTitle, style: TextStyle(color: context.muted, fontSize: 13)),
+                  Text(
+                    person.roleTitle,
+                    style: TextStyle(color: context.muted, fontSize: 13),
+                  ),
               ],
             ),
           ),
@@ -440,7 +475,13 @@ class _TeamPickerSheet extends ConsumerWidget {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Text(t.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                          child: Text(
+                            t.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                            ),
+                          ),
                         ),
                         Icon(Icons.chevron_right, color: context.muted),
                       ],
@@ -512,21 +553,28 @@ Future<void> showNewTaskSheet(
   BuildContext context, {
   required String orgId,
   String? presetTeamId,
+  DateTime? presetDueDate,
 }) {
   return showKeelSheet<void>(
     context,
-    builder: (context, c) =>
-        _NewTaskSheet(orgId: orgId, presetTeamId: presetTeamId, scrollController: c),
+    builder: (context, c) => _NewTaskSheet(
+      orgId: orgId,
+      presetTeamId: presetTeamId,
+      presetDueDate: presetDueDate,
+      scrollController: c,
+    ),
   );
 }
 
 class _NewTaskSheet extends ConsumerStatefulWidget {
   final String orgId;
   final String? presetTeamId;
+  final DateTime? presetDueDate;
   final ScrollController scrollController;
   const _NewTaskSheet({
     required this.orgId,
     this.presetTeamId,
+    this.presetDueDate,
     required this.scrollController,
   });
 
@@ -557,6 +605,8 @@ class _NewTaskSheetState extends ConsumerState<_NewTaskSheet> {
   void initState() {
     super.initState();
     _teamId = widget.presetTeamId;
+    // From the calendar: the new task is due on the tapped day.
+    _due = widget.presetDueDate;
   }
 
   Future<void> _create() async {
@@ -575,6 +625,8 @@ class _NewTaskSheetState extends ConsumerState<_NewTaskSheet> {
       assigneeIds: _assignees.toList(),
       subTodoTitles: _subs,
     );
+    // A dated task gets its reminders now (1.3.0).
+    unawaited(NotificationService.syncForRef(ref));
     if (mounted) {
       Navigator.of(context).pop();
       showKeelSnack(context, 'Task created');
@@ -590,10 +642,7 @@ class _NewTaskSheetState extends ConsumerState<_NewTaskSheet> {
     final dueChips = <(String, DateTime?)>[
       ('Today', today),
       ('Tomorrow', today.add(const Duration(days: 1))),
-      (
-        'Pick',
-        null,
-      ),
+      ('Pick', null),
     ];
     return SheetScaffold(
       title: 'New task',
@@ -611,7 +660,11 @@ class _NewTaskSheetState extends ConsumerState<_NewTaskSheet> {
             textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: 12),
-          KeelTextField(controller: _notes, hint: 'Notes (optional)', maxLines: 3),
+          KeelTextField(
+            controller: _notes,
+            hint: 'Notes (optional)',
+            maxLines: 3,
+          ),
           const SizedBox(height: 16),
           const _Caption('Due date'),
           const SizedBox(height: 8),
@@ -626,12 +679,17 @@ class _NewTaskSheetState extends ConsumerState<_NewTaskSheet> {
                         : label,
                   ),
                   selected: label == 'Pick'
-                      ? _due != null && _due != today && _due != today.add(const Duration(days: 1))
+                      ? _due != null &&
+                            _due != today &&
+                            _due != today.add(const Duration(days: 1))
                       : _due == date,
                   selectedColor: context.accent,
                   labelStyle: TextStyle(
-                    color: (label == 'Pick'
-                            ? _due != null && _due != today && _due != today.add(const Duration(days: 1))
+                    color:
+                        (label == 'Pick'
+                            ? _due != null &&
+                                  _due != today &&
+                                  _due != today.add(const Duration(days: 1))
                             : _due == date)
                         ? Colors.white
                         : context.ink,
@@ -731,7 +789,10 @@ class _NewTaskSheetState extends ConsumerState<_NewTaskSheet> {
                   FilterChip(
                     label: Text(p.name),
                     selected: _assignees.contains(p.id),
-                    selectedColor: KeelTokens.tint14(context.accent, context.card),
+                    selectedColor: KeelTokens.tint14(
+                      context.accent,
+                      context.card,
+                    ),
                     checkmarkColor: context.accent,
                     backgroundColor: context.card,
                     side: BorderSide(color: context.line),
@@ -806,7 +867,11 @@ class _Caption extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.muted),
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: context.muted,
+      ),
     );
   }
 }
@@ -815,31 +880,77 @@ class _Caption extends StatelessWidget {
 // New Person sheet
 // ---------------------------------------------------------------------------
 
-Future<void> showNewPersonSheet(BuildContext context, {required String orgId}) {
+/// New / Edit person sheet (1.3.0, DECISIONS.md 37): one sheet for
+/// create and edit. Editing opens the same slide-up window,
+/// pre-filled — phones, emails, photo, notes and teams all
+/// changeable — the way task editing already works. The old small
+/// `_editPerson` popup in people.dart is deleted.
+Future<void> showNewPersonSheet(
+  BuildContext context, {
+  required String orgId,
+  Person? existing,
+}) {
   return showKeelSheet<void>(
     context,
     builder: (context, c) =>
-        _NewPersonSheet(orgId: orgId, scrollController: c),
+        _NewPersonSheet(orgId: orgId, existing: existing, scrollController: c),
   );
 }
 
 class _NewPersonSheet extends ConsumerStatefulWidget {
   final String orgId;
+  final Person? existing;
   final ScrollController scrollController;
-  const _NewPersonSheet({required this.orgId, required this.scrollController});
+  const _NewPersonSheet({
+    required this.orgId,
+    this.existing,
+    required this.scrollController,
+  });
 
   @override
   ConsumerState<_NewPersonSheet> createState() => _NewPersonSheetState();
 }
 
 class _NewPersonSheetState extends ConsumerState<_NewPersonSheet> {
-  final _name = TextEditingController();
-  final _role = TextEditingController();
-  final _phone = TextEditingController();
-  final _email = TextEditingController();
-  final _notes = TextEditingController();
+  late final TextEditingController _name;
+  late final TextEditingController _role;
+  late final TextEditingController _phone;
+  late final TextEditingController _email;
+  late final TextEditingController _notes;
   final _teams = <String>{};
+  List<PersonPhone> _phones = [];
+  List<PersonEmail> _emails = [];
+  String? _photoPath;
   String? _error;
+
+  bool get _isEdit => widget.existing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    _name = TextEditingController(text: existing?.name ?? '');
+    _role = TextEditingController(text: existing?.roleTitle ?? '');
+    _phone = TextEditingController();
+    _email = TextEditingController();
+    _notes = TextEditingController(text: existing?.notes ?? '');
+    _photoPath = existing?.photoPath;
+    if (existing != null) {
+      // Pre-fill the current phones, emails and teams. Loaded once
+      // here (not streamed): adds/removes below update the lists
+      // and the DB together, so the sheet never shows stale rows.
+      final repo = ref.read(repositoryProvider);
+      repo.getPhones(existing.id).then((v) {
+        if (mounted) setState(() => _phones = v);
+      });
+      repo.getEmails(existing.id).then((v) {
+        if (mounted) setState(() => _emails = v);
+      });
+      repo.getTeamsForPerson(existing.id).then((v) {
+        if (mounted) setState(() => _teams.addAll(v.map((t) => t.id)));
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -876,31 +987,301 @@ class _NewPersonSheetState extends ConsumerState<_NewPersonSheet> {
     }
   }
 
+  Future<void> _save() async {
+    if (_name.text.trim().isEmpty) {
+      setState(() => _error = 'Give the person a name.');
+      return;
+    }
+    final person = widget.existing!;
+    final repo = ref.read(repositoryProvider);
+    await repo.updatePerson(
+      person.id,
+      name: _name.text,
+      roleTitle: _role.text,
+      notes: _notes.text,
+      photoPath: Value(_photoPath),
+    );
+    // Phones/emails added or removed below are already in the DB
+    // (they apply live); only the team memberships sync here.
+    final current = (await repo.getTeamsForPerson(
+      person.id,
+    )).map((t) => t.id).toSet();
+    for (final id in _teams) {
+      if (!current.contains(id)) await repo.addTeamMember(id, person.id);
+    }
+    for (final id in current) {
+      if (_teams.contains(id)) continue;
+      try {
+        await repo.removeTeamMember(id, person.id);
+      } on LeaderRemovalNeedsReplacement {
+        // Rule 4: they lead this team — pick a replacement first.
+        if (!mounted) return;
+        final members = await repo.getTeamMembers(id);
+        final candidates = members.where((p) => p.id != person.id).toList();
+        if (candidates.isEmpty) {
+          if (mounted) {
+            showKeelSnack(
+              context,
+              '${person.name} is the only member of that team. Add someone first.',
+            );
+          }
+          return;
+        }
+        if (!mounted) return;
+        final replacement = await pickLeader(
+          context,
+          orgId: widget.orgId,
+          candidates: candidates,
+          title: 'Pick a new leader',
+        );
+        if (replacement != null) {
+          await repo.removeTeamMember(id, person.id, newLeaderId: replacement);
+        }
+      }
+    }
+    if (mounted) {
+      Navigator.of(context).pop();
+      showKeelSnack(context, 'Person updated');
+    }
+  }
+
+  Future<void> _addPhone() async {
+    final number = _phone.text.trim();
+    final person = widget.existing;
+    if (number.isEmpty || person == null) return;
+    final repo = ref.read(repositoryProvider);
+    await repo.addPhone(person.id, 'mobile', number);
+    final phones = await repo.getPhones(person.id);
+    _phone.clear();
+    if (mounted) setState(() => _phones = phones);
+  }
+
+  Future<void> _addEmail() async {
+    final address = _email.text.trim();
+    final person = widget.existing;
+    if (address.isEmpty || person == null) return;
+    final repo = ref.read(repositoryProvider);
+    await repo.addEmail(person.id, 'work', address);
+    final emails = await repo.getEmails(person.id);
+    _email.clear();
+    if (mounted) setState(() => _emails = emails);
+  }
+
+  /// Photo picker (edit only): camera / gallery / remove, the same
+  /// choice sheet the person page uses. The picked file is only
+  /// saved to the person when Save is tapped.
+  Future<void> _pickPhoto() async {
+    final person = widget.existing;
+    if (person == null) return;
+    final choice = await showKeelDialogSheet<String>(
+      context,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Photo',
+              style: Theme.of(
+                context,
+              ).textTheme.displayMedium?.copyWith(fontSize: 22),
+            ),
+            const SizedBox(height: 14),
+            KeelButton(
+              label: 'Take a photo',
+              onPressed: () => Navigator.of(context).pop('camera'),
+              secondary: true,
+            ),
+            const SizedBox(height: 10),
+            KeelButton(
+              label: 'Choose from gallery',
+              onPressed: () => Navigator.of(context).pop('gallery'),
+              secondary: true,
+            ),
+            if (_photoPath != null) ...[
+              const SizedBox(height: 10),
+              KeelButton(
+                label: 'Remove photo',
+                onPressed: () => Navigator.of(context).pop('remove'),
+                secondary: true,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+    if (choice == 'camera' || choice == 'gallery') {
+      final source = choice == 'camera'
+          ? ImageSource.camera
+          : ImageSource.gallery;
+      final path = await PhotoService().pickPhoto(
+        source: source,
+        personId: person.id,
+      );
+      if (path != null && mounted) setState(() => _photoPath = path);
+    } else if (choice == 'remove') {
+      final old = _photoPath;
+      if (mounted) setState(() => _photoPath = null);
+      if (old != null) unawaited(PhotoService().deletePhoto(old));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final teamsAsync = ref.watch(teamsProvider(widget.orgId));
+    final repo = ref.read(repositoryProvider);
     return SheetScaffold(
-      title: 'New person',
-      buttonLabel: 'Add person',
-      onButton: _create,
+      title: _isEdit ? 'Edit person' : 'New person',
+      buttonLabel: _isEdit ? 'Save changes' : 'Add person',
+      onButton: _isEdit ? _save : _create,
       scrollController: widget.scrollController,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_isEdit) ...[
+            Row(
+              children: [
+                PersonAvatar(
+                  person: widget.existing!.copyWith(
+                    photoPath: Value(_photoPath),
+                  ),
+                  ringColor: KeelTokens.noTeam,
+                  size: 56,
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: _pickPhoto,
+                  icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                  label: const Text('Change photo'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: context.accent,
+                    side: BorderSide(color: context.line),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
           KeelTextField(
             controller: _name,
             label: 'Name',
             hint: 'Full name',
-            autofocus: true,
+            autofocus: !_isEdit,
             errorText: _error,
             textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: 12),
-          KeelTextField(controller: _role, label: 'Role', hint: 'Role (optional)', textInputAction: TextInputAction.next),
-          const SizedBox(height: 12),
-          KeelTextField(controller: _phone, label: 'Phone', hint: 'First phone (optional)', keyboardType: TextInputType.phone, textInputAction: TextInputAction.next),
-          const SizedBox(height: 12),
-          KeelTextField(controller: _email, label: 'Email', hint: 'First email (optional)', keyboardType: TextInputType.emailAddress, textInputAction: TextInputAction.next),
+          KeelTextField(
+            controller: _role,
+            label: 'Role',
+            hint: 'Role (optional)',
+            textInputAction: TextInputAction.next,
+          ),
+          if (!_isEdit) ...[
+            const SizedBox(height: 12),
+            KeelTextField(
+              controller: _phone,
+              label: 'Phone',
+              hint: 'First phone (optional)',
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 12),
+            KeelTextField(
+              controller: _email,
+              label: 'Email',
+              hint: 'First email (optional)',
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+            ),
+          ] else ...[
+            const SizedBox(height: 16),
+            const _Caption('Phones'),
+            const SizedBox(height: 8),
+            for (final ph in _phones)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(child: Text('${ph.label}: ${ph.number}')),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      color: context.muted,
+                      onPressed: () async {
+                        await repo.deletePhone(ph.id);
+                        if (mounted) {
+                          setState(() => _phones.remove(ph));
+                        }
+                      },
+                      tooltip: 'Delete phone',
+                    ),
+                  ],
+                ),
+              ),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _phone,
+                    decoration: const InputDecoration(hintText: 'Add a phone'),
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _addPhone(),
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.add_circle, color: context.accent, size: 28),
+                  onPressed: _addPhone,
+                  tooltip: 'Add phone',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const _Caption('Emails'),
+            const SizedBox(height: 8),
+            for (final em in _emails)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(child: Text('${em.label}: ${em.address}')),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18),
+                      color: context.muted,
+                      onPressed: () async {
+                        await repo.deleteEmail(em.id);
+                        if (mounted) {
+                          setState(() => _emails.remove(em));
+                        }
+                      },
+                      tooltip: 'Delete email',
+                    ),
+                  ],
+                ),
+              ),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _email,
+                    decoration: const InputDecoration(hintText: 'Add an email'),
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _addEmail(),
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.add_circle, color: context.accent, size: 28),
+                  onPressed: _addEmail,
+                  tooltip: 'Add email',
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 16),
           const _Caption('Teams'),
           const SizedBox(height: 8),
@@ -934,7 +1315,12 @@ class _NewPersonSheetState extends ConsumerState<_NewPersonSheet> {
             error: (_, _) => const SizedBox.shrink(),
           ),
           const SizedBox(height: 16),
-          KeelTextField(controller: _notes, label: 'Notes', hint: 'Notes (optional)', maxLines: 3),
+          KeelTextField(
+            controller: _notes,
+            label: 'Notes',
+            hint: 'Notes (optional)',
+            maxLines: 3,
+          ),
         ],
       ),
     );
@@ -945,29 +1331,63 @@ class _NewPersonSheetState extends ConsumerState<_NewPersonSheet> {
 // New Team sheet — leader required (rule 4), leader can be created inline.
 // ---------------------------------------------------------------------------
 
-Future<void> showNewTeamSheet(BuildContext context, {required String orgId}) {
+/// New / Edit team sheet (1.3.0, DECISIONS.md 37): one sheet for
+/// create and edit. Editing opens the same slide-up window,
+/// pre-filled — name, colour, leader, members and (edit only) the
+/// main task, all changeable — the way task editing already works.
+/// The old small `_editTeam` popup in teams.dart is deleted.
+Future<void> showNewTeamSheet(
+  BuildContext context, {
+  required String orgId,
+  Team? existing,
+}) {
   return showKeelSheet<void>(
     context,
     builder: (context, c) =>
-        _NewTeamSheet(orgId: orgId, scrollController: c),
+        _NewTeamSheet(orgId: orgId, existing: existing, scrollController: c),
   );
 }
 
 class _NewTeamSheet extends ConsumerStatefulWidget {
   final String orgId;
+  final Team? existing;
   final ScrollController scrollController;
-  const _NewTeamSheet({required this.orgId, required this.scrollController});
+  const _NewTeamSheet({
+    required this.orgId,
+    this.existing,
+    required this.scrollController,
+  });
 
   @override
   ConsumerState<_NewTeamSheet> createState() => _NewTeamSheetState();
 }
 
 class _NewTeamSheetState extends ConsumerState<_NewTeamSheet> {
-  final _name = TextEditingController();
-  String _color = KeelTokens.hexOf(KeelTokens.teamPresets[0]);
+  late final TextEditingController _name;
+  late String _color;
   String? _leaderId;
+  String? _mainTaskId;
   final _members = <String>{};
   String? _error;
+
+  bool get _isEdit => widget.existing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    _name = TextEditingController(text: existing?.name ?? '');
+    _color = existing?.colorHex ?? KeelTokens.hexOf(KeelTokens.teamPresets[0]);
+    _leaderId = existing?.leaderPersonId;
+    _mainTaskId = existing?.mainTaskId;
+    if (existing != null) {
+      // Pre-fill the current members. Loaded once here (not
+      // streamed): the chips toggle local state until Save.
+      ref.read(repositoryProvider).getTeamMembers(existing.id).then((v) {
+        if (mounted) setState(() => _members.addAll(v.map((p) => p.id)));
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -998,13 +1418,58 @@ class _NewTeamSheetState extends ConsumerState<_NewTeamSheet> {
     }
   }
 
+  Future<void> _save() async {
+    if (_name.text.trim().isEmpty) {
+      setState(() => _error = 'Give the team a name.');
+      return;
+    }
+    if (_leaderId == null) {
+      setState(() => _error = 'Choose a leader for the team.');
+      return;
+    }
+    final team = widget.existing!;
+    final repo = ref.read(repositoryProvider);
+    final current = (await repo.getTeamMembers(
+      team.id,
+    )).map((p) => p.id).toSet();
+    // 1) Add new members first: the new leader must already be a
+    //    member before updateTeam accepts them as leader.
+    for (final id in _members) {
+      if (!current.contains(id)) await repo.addTeamMember(team.id, id);
+    }
+    // 2) Name / colour / leader.
+    await repo.updateTeam(
+      team.id,
+      name: _name.text,
+      colorHex: _color,
+      leaderPersonId: _leaderId,
+    );
+    // 3) Remove deselected members. The current leader's chip is
+    //    disabled, so this never removes the leader; the old leader
+    //    can leave now that leadership has moved.
+    for (final id in current) {
+      if (!_members.contains(id)) {
+        await repo.removeTeamMember(team.id, id);
+      }
+    }
+    // 4) Main task, if changed.
+    if (_mainTaskId != team.mainTaskId) {
+      await repo.setMainTask(team.id, _mainTaskId);
+    }
+    if (mounted) {
+      Navigator.of(context).pop();
+      showKeelSnack(context, 'Team updated');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final peopleAsync = ref.watch(peopleProvider(widget.orgId));
+    final tasksAsync = ref.watch(tasksProvider(widget.orgId));
     return SheetScaffold(
-      title: 'New team',
-      buttonLabel: 'Create team',
-      onButton: _create,
+      title: _isEdit ? 'Edit team' : 'New team',
+      buttonLabel: _isEdit ? 'Save changes' : 'Create team',
+      onButton: _isEdit ? _save : _create,
       scrollController: widget.scrollController,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1012,7 +1477,7 @@ class _NewTeamSheetState extends ConsumerState<_NewTeamSheet> {
           KeelTextField(
             controller: _name,
             hint: 'Team name',
-            autofocus: true,
+            autofocus: !_isEdit,
             errorText: _error,
             textInputAction: TextInputAction.next,
           ),
@@ -1060,7 +1525,9 @@ class _NewTeamSheetState extends ConsumerState<_NewTeamSheet> {
                     },
                     icon: const Icon(Icons.person_add_outlined, size: 18),
                     label: const Text('Or create a person first'),
-                    style: TextButton.styleFrom(foregroundColor: context.accent),
+                    style: TextButton.styleFrom(
+                      foregroundColor: context.accent,
+                    ),
                   ),
                 ],
               );
@@ -1080,7 +1547,10 @@ class _NewTeamSheetState extends ConsumerState<_NewTeamSheet> {
                   FilterChip(
                     label: Text(p.name),
                     selected: _members.contains(p.id) || p.id == _leaderId,
-                    selectedColor: KeelTokens.tint14(context.accent, context.card),
+                    selectedColor: KeelTokens.tint14(
+                      context.accent,
+                      context.card,
+                    ),
                     checkmarkColor: context.accent,
                     backgroundColor: context.card,
                     side: BorderSide(color: context.line),
@@ -1099,6 +1569,53 @@ class _NewTeamSheetState extends ConsumerState<_NewTeamSheet> {
             loading: () => const SizedBox.shrink(),
             error: (_, _) => const SizedBox.shrink(),
           ),
+          if (_isEdit) ...[
+            const SizedBox(height: 16),
+            const _Caption('Main task'),
+            const SizedBox(height: 8),
+            tasksAsync.when(
+              data: (tasks) {
+                final teamTasks = tasks
+                    .where((t) => t.teamId == widget.existing!.id)
+                    .toList();
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('No main task'),
+                      selected: _mainTaskId == null,
+                      selectedColor: context.accent,
+                      labelStyle: TextStyle(
+                        color: _mainTaskId == null ? Colors.white : context.ink,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      backgroundColor: context.card,
+                      side: BorderSide(color: context.line),
+                      onSelected: (_) => setState(() => _mainTaskId = null),
+                    ),
+                    for (final t in teamTasks)
+                      ChoiceChip(
+                        label: Text(t.title),
+                        selected: _mainTaskId == t.id,
+                        selectedColor: context.accent,
+                        labelStyle: TextStyle(
+                          color: _mainTaskId == t.id
+                              ? Colors.white
+                              : context.ink,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        backgroundColor: context.card,
+                        side: BorderSide(color: context.line),
+                        onSelected: (_) => setState(() => _mainTaskId = t.id),
+                      ),
+                  ],
+                );
+              },
+              loading: () => const SizedBox.shrink(),
+              error: (_, _) => const SizedBox.shrink(),
+            ),
+          ],
         ],
       ),
     );
@@ -1188,18 +1705,35 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
       priority: _priority,
       teamId: Value(_teamId),
     );
+    // A changed due date moves (or removes) the reminders (1.3.0).
+    unawaited(NotificationService.syncForRef(ref));
     if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> _delete() async {
     final repo = ref.read(repositoryProvider);
+    // Settings captured now: the undo closure runs after this sheet
+    // is popped, so it must not touch ref.
+    final settings = ref.read(settingsProvider);
     final snap = await repo.deleteTask(widget.task.id);
+    unawaited(NotificationService.cancelTaskReminders(widget.task.id));
     if (mounted) {
       Navigator.of(context).pop();
       showUndoSnack(
         context,
         label: 'Task deleted',
-        onUndo: () => repo.restoreSnapshot(snap),
+        onUndo: () async {
+          await repo.restoreSnapshot(snap);
+          unawaited(
+            NotificationService.syncTaskReminders(
+              repo: repo,
+              orgId: widget.task.orgId,
+              on: settings.remindersOn,
+              hour: settings.digestHour,
+              minute: settings.digestMinute,
+            ),
+          );
+        },
       );
     }
   }
@@ -1230,7 +1764,10 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
               Expanded(
                 child: TextField(
                   controller: _title,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
                   decoration: const InputDecoration(border: InputBorder.none),
                 ),
               ),
@@ -1250,11 +1787,18 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
               ])
                 ChoiceChip(
                   label: Text(label),
-                  selected: _due == date ||
-                      (date != null && _due != null && _due!.difference(date).inDays == 0),
+                  selected:
+                      _due == date ||
+                      (date != null &&
+                          _due != null &&
+                          _due!.difference(date).inDays == 0),
                   selectedColor: context.accent,
                   labelStyle: TextStyle(
-                    color: (_due == date || (date != null && _due != null && _due!.difference(date).inDays == 0))
+                    color:
+                        (_due == date ||
+                            (date != null &&
+                                _due != null &&
+                                _due!.difference(date).inDays == 0))
                         ? Colors.white
                         : context.ink,
                     fontWeight: FontWeight.w600,
@@ -1265,7 +1809,9 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                 ),
               ActionChip(
                 label: Text(
-                  _due == null ? 'Pick a date' : '${_due!.day}/${_due!.month}/${_due!.year}',
+                  _due == null
+                      ? 'Pick a date'
+                      : '${_due!.day}/${_due!.month}/${_due!.year}',
                 ),
                 onPressed: () async {
                   final picked = await showDatePicker(
@@ -1372,7 +1918,10 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
           const SizedBox(height: 4),
           assigneesAsync.when(
             data: (people) => people.isEmpty
-                ? Text('Nobody assigned yet.', style: TextStyle(color: context.muted, fontSize: 13))
+                ? Text(
+                    'Nobody assigned yet.',
+                    style: TextStyle(color: context.muted, fontSize: 13),
+                  )
                 : Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -1389,7 +1938,10 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
           const SizedBox(height: 8),
           subsAsync.when(
             data: (subs) => subs.isEmpty
-                ? Text('No sub-tasks yet.', style: TextStyle(color: context.muted, fontSize: 13))
+                ? Text(
+                    'No sub-tasks yet.',
+                    style: TextStyle(color: context.muted, fontSize: 13),
+                  )
                 : SizedBox(
                     height: (subs.length * 52).clamp(52, 260).toDouble(),
                     child: ReorderableListView.builder(
@@ -1411,13 +1963,16 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                             KeelCheckbox(
                               value: s.isDone,
                               size: 20,
-                              onChanged: (done) => repo.toggleSubTodo(s.id, done),
+                              onChanged: (done) =>
+                                  repo.toggleSubTodo(s.id, done),
                             ),
                             Expanded(
                               child: Text(
                                 s.title,
                                 style: TextStyle(
-                                  decoration: s.isDone ? TextDecoration.lineThrough : null,
+                                  decoration: s.isDone
+                                      ? TextDecoration.lineThrough
+                                      : null,
                                   color: s.isDone ? context.muted : context.ink,
                                 ),
                               ),
@@ -1518,8 +2073,9 @@ class _TeamOverviewSheet extends ConsumerWidget {
     final color = KeelTokens.colorFromHex(team.colorHex);
     final membersAsync = ref.watch(teamMembersProvider(team.id));
     final tasksAsync = ref.watch(tasksProvider(orgId));
-    final teamTasks =
-        (tasksAsync.value ?? const []).where((t) => t.teamId == team.id).toList();
+    final teamTasks = (tasksAsync.value ?? const [])
+        .where((t) => t.teamId == team.id)
+        .toList();
     final done = teamTasks.where((t) => t.isDone).length;
     final pct = teamTasks.isEmpty ? 0 : (done / teamTasks.length * 100).round();
     final mainTask = team.mainTaskId == null
@@ -1549,9 +2105,16 @@ class _TeamOverviewSheet extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(team.name, style: Theme.of(context).textTheme.displayMedium?.copyWith(fontSize: 24)),
+                    Text(
+                      team.name,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.displayMedium?.copyWith(fontSize: 24),
+                    ),
                     FutureBuilder<Person?>(
-                      future: ref.read(repositoryProvider).getPerson(team.leaderPersonId),
+                      future: ref
+                          .read(repositoryProvider)
+                          .getPerson(team.leaderPersonId),
                       builder: (context, snap) => Text(
                         'Led by ${snap.data?.name ?? '…'}',
                         style: TextStyle(color: context.muted, fontSize: 13),
@@ -1565,7 +2128,10 @@ class _TeamOverviewSheet extends ConsumerWidget {
           const SizedBox(height: 14),
           Row(
             children: [
-              StatTile(value: '${membersAsync.value?.length ?? 0}', label: 'People'),
+              StatTile(
+                value: '${membersAsync.value?.length ?? 0}',
+                label: 'People',
+              ),
               const SizedBox(width: 8),
               StatTile(value: '${teamTasks.length}', label: 'Tasks'),
               const SizedBox(width: 8),
@@ -1577,14 +2143,27 @@ class _TeamOverviewSheet extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Main task', style: TextStyle(color: context.muted, fontSize: 12, fontWeight: FontWeight.w600)),
+                Text(
+                  'Main task',
+                  style: TextStyle(
+                    color: context.muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   mainTask?.title ?? 'No main task set',
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                  ),
                 ),
                 const SizedBox(height: 8),
-                ProgressBar(value: teamTasks.isEmpty ? 0 : done / teamTasks.length, color: color),
+                ProgressBar(
+                  value: teamTasks.isEmpty ? 0 : done / teamTasks.length,
+                  color: color,
+                ),
               ],
             ),
           ),
@@ -1603,8 +2182,13 @@ class _TeamOverviewSheet extends ConsumerWidget {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            members.map((p) => p.name.split(' ').first).join(', '),
-                            style: TextStyle(color: context.muted, fontSize: 13),
+                            members
+                                .map((p) => p.name.split(' ').first)
+                                .join(', '),
+                            style: TextStyle(
+                              color: context.muted,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                       ],
@@ -1625,9 +2209,7 @@ class _TeamOverviewSheet extends ConsumerWidget {
             },
           ),
           // Keep leaderAsync referenced so the provider stays warm; no UI.
-          ...[
-            if (leaderAsync is AsyncLoading) const SizedBox.shrink(),
-          ],
+          ...[if (leaderAsync is AsyncLoading) const SizedBox.shrink()],
         ],
       ),
     );
@@ -1684,7 +2266,7 @@ class _TaskOverviewSheet extends ConsumerWidget {
     final dueText = task.dueDate == null
         ? 'No due date'
         : '${dueLabel(task.dueDate, isDone: task.isDone)} · '
-            '${task.dueDate!.day}/${task.dueDate!.month}/${task.dueDate!.year}';
+              '${task.dueDate!.day}/${task.dueDate!.month}/${task.dueDate!.year}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -1700,7 +2282,10 @@ class _TaskOverviewSheet extends ConsumerWidget {
                 semanticLabel: task.isDone
                     ? 'Mark "${task.title}" not done'
                     : 'Mark "${task.title}" done',
-                onChanged: (done) => repo.setTaskDone(task.id, done),
+                onChanged: (done) async {
+                  await repo.setTaskDone(task.id, done);
+                  unawaited(NotificationService.syncForRef(ref));
+                },
               ),
               const SizedBox(width: 4),
               Expanded(
@@ -1712,8 +2297,7 @@ class _TaskOverviewSheet extends ConsumerWidget {
                     fontSize: 22,
                     height: 1.1,
                     color: context.ink,
-                    decoration:
-                        task.isDone ? TextDecoration.lineThrough : null,
+                    decoration: task.isDone ? TextDecoration.lineThrough : null,
                     decorationColor: context.muted,
                   ),
                 ),
@@ -1733,8 +2317,8 @@ class _TaskOverviewSheet extends ConsumerWidget {
                 color: overdue
                     ? KeelTokens.overdue
                     : dueSoon
-                        ? KeelTokens.colorFromHex('#B7791F')
-                        : context.muted,
+                    ? KeelTokens.colorFromHex('#B7791F')
+                    : context.muted,
               ),
               const SizedBox(width: 6),
               // Flexible: after Complete the row also carries the
@@ -1749,8 +2333,8 @@ class _TaskOverviewSheet extends ConsumerWidget {
                     color: overdue
                         ? KeelTokens.overdue
                         : dueSoon
-                            ? KeelTokens.colorFromHex('#B7791F')
-                            : context.muted,
+                        ? KeelTokens.colorFromHex('#B7791F')
+                        : context.muted,
                   ),
                 ),
               ),
@@ -1800,16 +2384,14 @@ class _TaskOverviewSheet extends ConsumerWidget {
                           KeelCheckbox(
                             value: s.isDone,
                             size: 20,
-                            onChanged: (done) =>
-                                repo.toggleSubTodo(s.id, done),
+                            onChanged: (done) => repo.toggleSubTodo(s.id, done),
                           ),
                           Expanded(
                             child: Text(
                               s.title,
                               style: TextStyle(
                                 fontSize: 14,
-                                color:
-                                    s.isDone ? context.muted : context.ink,
+                                color: s.isDone ? context.muted : context.ink,
                                 decoration: s.isDone
                                     ? TextDecoration.lineThrough
                                     : null,
@@ -1879,7 +2461,10 @@ class _TaskOverviewSheet extends ConsumerWidget {
                       : Icons.check_circle_outline,
                   label: task.isDone ? 'Reopen' : 'Complete',
                   color: KeelTokens.success,
-                  onTap: () => repo.setTaskDone(task.id, !task.isDone),
+                  onTap: () async {
+                    await repo.setTaskDone(task.id, !task.isDone);
+                    unawaited(NotificationService.syncForRef(ref));
+                  },
                 ),
               ),
               const SizedBox(width: 8),
@@ -1888,11 +2473,8 @@ class _TaskOverviewSheet extends ConsumerWidget {
                   icon: Icons.edit_outlined,
                   label: 'Edit',
                   color: context.ink,
-                  onTap: () => showTaskDetailSheet(
-                    context,
-                    task: task,
-                    orgId: orgId,
-                  ),
+                  onTap: () =>
+                      showTaskDetailSheet(context, task: task, orgId: orgId),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1902,14 +2484,27 @@ class _TaskOverviewSheet extends ConsumerWidget {
                   label: 'Delete',
                   color: KeelTokens.overdue,
                   onTap: () async {
+                    final settings = ref.read(settingsProvider);
                     final snap = await repo.deleteTask(task.id);
+                    unawaited(NotificationService.cancelTaskReminders(task.id));
                     if (!context.mounted) return;
                     // Snackbar first: this sheet's context is unmounted
                     // after the pop below, so it could not show one.
                     showUndoSnack(
                       context,
                       label: 'Task deleted',
-                      onUndo: () => repo.restoreSnapshot(snap),
+                      onUndo: () async {
+                        await repo.restoreSnapshot(snap);
+                        unawaited(
+                          NotificationService.syncTaskReminders(
+                            repo: repo,
+                            orgId: orgId,
+                            on: settings.remindersOn,
+                            hour: settings.digestHour,
+                            minute: settings.digestMinute,
+                          ),
+                        );
+                      },
                     );
                     if (context.mounted) Navigator.of(context).pop();
                   },
@@ -2040,11 +2635,7 @@ class _PersonOverviewSheet extends ConsumerWidget {
   final String orgId;
   const _PersonOverviewSheet({required this.person, required this.orgId});
 
-  Future<void> _launch(
-    BuildContext context,
-    Uri uri,
-    String label,
-  ) async {
+  Future<void> _launch(BuildContext context, Uri uri, String label) async {
     // Launch directly and check the result instead of gating on
     // canLaunchUrl, which false-negatives on Android 11+ without a
     // matching <queries> declaration (see AndroidManifest).
@@ -2084,11 +2675,7 @@ class _PersonOverviewSheet extends ConsumerWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  PersonAvatar(
-                    person: person,
-                    ringColor: ringColor,
-                    size: 64,
-                  ),
+                  PersonAvatar(person: person, ringColor: ringColor, size: 64),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -2107,21 +2694,27 @@ class _PersonOverviewSheet extends ConsumerWidget {
                         if (person.roleTitle.isNotEmpty)
                           Text(
                             person.roleTitle,
-                            style:
-                                TextStyle(color: context.muted, fontSize: 13),
+                            style: TextStyle(
+                              color: context.muted,
+                              fontSize: 13,
+                            ),
                           ),
                         if (hasPhone)
                           Text(
                             firstPhone.number,
-                            style:
-                                TextStyle(color: context.muted, fontSize: 13),
+                            style: TextStyle(
+                              color: context.muted,
+                              fontSize: 13,
+                            ),
                           ),
                         const SizedBox(height: 6),
                         if (teams.isEmpty)
                           Text(
                             'No team',
-                            style:
-                                TextStyle(color: context.muted, fontSize: 12),
+                            style: TextStyle(
+                              color: context.muted,
+                              fontSize: 12,
+                            ),
                           )
                         else
                           Wrap(
@@ -2152,10 +2745,10 @@ class _PersonOverviewSheet extends ConsumerWidget {
                         enabled: hasPhone,
                         onTap: hasPhone
                             ? () => _launch(
-                                  context,
-                                  Uri.parse('tel:${firstPhone.number}'),
-                                  'the dialler',
-                                )
+                                context,
+                                Uri.parse('tel:${firstPhone.number}'),
+                                'the dialler',
+                              )
                             : null,
                       ),
                       const SizedBox(height: 8),
@@ -2256,11 +2849,108 @@ class _ContactActionButton extends StatelessWidget {
 // Organization switcher sheet — tap the Home header.
 // ---------------------------------------------------------------------------
 
-Future<void> showOrgSwitcherSheet(BuildContext context) {
-  return showKeelDialogSheet<void>(
+/// New Organization sheet (1.3.0, DECISIONS.md 40): name + a type
+/// picker (Studio, Company, Club, Family, Other) in the same
+/// uncluttered slide-up pattern as task/team creation — no long
+/// form. Used from Settings and from the org switcher. Onboarding
+/// keeps its own flow and is untouched. Returns the created org, or
+/// null if cancelled, and makes the new org active.
+Future<Organization?> showNewOrganizationSheet(BuildContext context) {
+  return showKeelSheet<Organization>(
     context,
-    child: const _OrgSwitcherSheet(),
+    builder: (context, c) => _NewOrganizationSheet(scrollController: c),
   );
+}
+
+class _NewOrganizationSheet extends ConsumerStatefulWidget {
+  final ScrollController scrollController;
+  const _NewOrganizationSheet({required this.scrollController});
+
+  @override
+  ConsumerState<_NewOrganizationSheet> createState() =>
+      _NewOrganizationSheetState();
+}
+
+class _NewOrganizationSheetState extends ConsumerState<_NewOrganizationSheet> {
+  final _name = TextEditingController();
+  String _kind = 'Studio';
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  Future<void> _create() async {
+    if (_name.text.trim().isEmpty) {
+      setState(() => _error = 'Give the organization a name.');
+      return;
+    }
+    final repo = ref.read(repositoryProvider);
+    final settings = ref.read(settingsProvider);
+    final org = await repo.createOrganization(name: _name.text, kind: _kind);
+    await settings.setActiveOrg(org.id);
+    if (mounted) {
+      Navigator.of(context).pop(org);
+      showKeelSnack(context, 'Organization created');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SheetScaffold(
+      title: 'New organization',
+      buttonLabel: 'Create organization',
+      onButton: _create,
+      scrollController: widget.scrollController,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          KeelTextField(
+            controller: _name,
+            label: 'Name',
+            hint: 'Organization name',
+            autofocus: true,
+            errorText: _error,
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 16),
+          const _Caption('Type'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final kind in [
+                'Studio',
+                'Company',
+                'Club',
+                'Family',
+                'Other',
+              ])
+                ChoiceChip(
+                  label: Text(kind),
+                  selected: _kind == kind,
+                  selectedColor: context.accent,
+                  labelStyle: TextStyle(
+                    color: _kind == kind ? Colors.white : context.ink,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  backgroundColor: context.card,
+                  side: BorderSide(color: context.line),
+                  onSelected: (_) => setState(() => _kind = kind),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> showOrgSwitcherSheet(BuildContext context) {
+  return showKeelDialogSheet<void>(context, child: const _OrgSwitcherSheet());
 }
 
 class _OrgSwitcherSheet extends ConsumerWidget {
@@ -2277,14 +2967,22 @@ class _OrgSwitcherSheet extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Switch organization', style: Theme.of(context).textTheme.displayMedium?.copyWith(fontSize: 24)),
+          Text(
+            'Switch organization',
+            style: Theme.of(
+              context,
+            ).textTheme.displayMedium?.copyWith(fontSize: 24),
+          ),
           const SizedBox(height: 12),
           orgsAsync.when(
             data: (orgs) => Column(
               children: [
                 for (final org in orgs)
                   KeelCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
                     onTap: () async {
                       await settings.setActiveOrg(org.id);
                       if (context.mounted) Navigator.of(context).pop();
@@ -2295,18 +2993,36 @@ class _OrgSwitcherSheet extends ConsumerWidget {
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: KeelTokens.tint14(context.accent, context.card),
+                            color: KeelTokens.tint14(
+                              context.accent,
+                              context.card,
+                            ),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Icon(Icons.business_outlined, color: context.accent),
+                          child: Icon(
+                            Icons.business_outlined,
+                            color: context.accent,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(org.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                              Text(org.kind, style: TextStyle(color: context.muted, fontSize: 13)),
+                              Text(
+                                org.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              Text(
+                                org.kind,
+                                style: TextStyle(
+                                  color: context.muted,
+                                  fontSize: 13,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -2320,37 +3036,14 @@ class _OrgSwitcherSheet extends ConsumerWidget {
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: () async {
-                      final name = TextEditingController();
-                      final created = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('New organization'),
-                          content: TextField(
-                            controller: name,
-                            autofocus: true,
-                            decoration: const InputDecoration(hintText: 'Organization name'),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(false),
-                              child: const Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(true),
-                              child: const Text('Create'),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (created == true && name.text.trim().isNotEmpty) {
-                        final org = await ref.read(repositoryProvider).createOrganization(
-                              name: name.text,
-                              kind: 'Other',
-                            );
-                        await settings.setActiveOrg(org.id);
-                        if (context.mounted) Navigator.of(context).pop();
+                      // 1.3.0: name + type picker in a proper sheet,
+                      // not a bare name-only popup. The new org is
+                      // made active by the sheet itself; closing the
+                      // switcher too when one was actually created.
+                      final created = await showNewOrganizationSheet(context);
+                      if (created != null && context.mounted) {
+                        Navigator.of(context).pop();
                       }
-                      name.dispose();
                     },
                     icon: const Icon(Icons.add, size: 20),
                     label: const Text('Add organization'),
@@ -2358,7 +3051,9 @@ class _OrgSwitcherSheet extends ConsumerWidget {
                       foregroundColor: context.accent,
                       side: BorderSide(color: context.line),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(KeelTokens.radiusButton),
+                        borderRadius: BorderRadius.circular(
+                          KeelTokens.radiusButton,
+                        ),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 13),
                     ),
@@ -2367,7 +3062,8 @@ class _OrgSwitcherSheet extends ConsumerWidget {
               ],
             ),
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, _) => const Center(child: Text('Could not load organizations.')),
+            error: (_, _) =>
+                const Center(child: Text('Could not load organizations.')),
           ),
         ],
       ),

@@ -176,6 +176,27 @@ class SubTodos extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// One note per day, per organization (1.3.0, calendar notes).
+/// The day is stored as a plain 'yyyy-MM-dd' string — a calendar date
+/// has no time, and a text key makes the day lookup exact with no
+/// timezone normalisation. One row per (org, date); saving an empty
+/// note deletes the row.
+class DayNotes extends Table {
+  TextColumn get id => text()();
+
+  TextColumn get orgId => text().references(Organizations, #id)();
+
+  /// The day, 'yyyy-MM-dd' in local time.
+  TextColumn get date => text()();
+
+  TextColumn get note => text()();
+
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ---------------------------------------------------------------------------
 // Database
 // ---------------------------------------------------------------------------
@@ -192,6 +213,7 @@ class SubTodos extends Table {
     Tasks,
     TaskAssignees,
     SubTodos,
+    DayNotes,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -200,7 +222,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   static LazyDatabase _openConnection() {
     return LazyDatabase(() async {
@@ -224,6 +246,12 @@ class AppDatabase extends _$AppDatabase {
           // and must never drop user data.
           if (from < 1) {
             await m.createAll();
+            await _createIndexes(m);
+          }
+          // v2 (1.3.0): calendar day notes. Additive only — every v1
+          // row survives; the new table starts empty.
+          if (from < 2) {
+            await m.createTable(dayNotes);
             await _createIndexes(m);
           }
         },
@@ -263,6 +291,9 @@ class AppDatabase extends _$AppDatabase {
     );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_emails_person ON person_emails (person_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_day_notes_org_date ON day_notes (org_id, date)',
     );
   }
 }

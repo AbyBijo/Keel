@@ -189,9 +189,20 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 );
                 if (confirmed == true && activeOrgId != null) {
+                  // The tasks are about to be deleted: their
+                  // reminders must not fire (1.3.0).
+                  final doneTasks = (await repo.getTasks(
+                    activeOrgId,
+                  )).where((t) => t.isDone).toList();
+                  for (final t in doneTasks) {
+                    await NotificationService.cancelTaskReminders(t.id);
+                  }
                   final n = await repo.clearCompletedTasks(activeOrgId);
                   if (context.mounted) {
-                    showKeelSnack(context, '$n completed task${n == 1 ? '' : 's'} cleared.');
+                    showKeelSnack(
+                      context,
+                      '$n completed task${n == 1 ? '' : 's'} cleared.',
+                    );
                   }
                 }
               },
@@ -269,9 +280,9 @@ class SettingsScreen extends ConsumerWidget {
               iconColor: context.accent,
               label: 'About',
               onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const AboutPage()),
-                );
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const AboutPage()));
               },
             ),
           ],
@@ -301,28 +312,17 @@ class SettingsScreen extends ConsumerWidget {
       }
     }
     await settings.setReminders(on);
-    await NotificationService.setDailyDigest(
-      on: on,
-      hour: settings.digestHour,
-      minute: settings.digestMinute,
-      counts: () async {
-        final orgId = ref.read(activeOrgProvider).value;
-        if (orgId == null) return (overdue: 0, dueSoon: 0, open: 0);
-        final stats = await ref.read(repositoryProvider).homeStats(orgId);
-        return (
-          overdue: stats.overdue,
-          dueSoon: stats.dueSoon,
-          open: stats.total - stats.done,
-        );
-      },
-    );
+    // 1.3.0: reconcile everything, not just the digest — the digest
+    // gets fresh counts and per-task reminders are (re)scheduled or
+    // cancelled with the current tasks.
+    await NotificationService.syncForRef(ref);
   }
 
   String _weekStartLabel(String v) => switch (v) {
-        'saturday' => 'Saturday',
-        'sunday' => 'Sunday',
-        _ => 'Monday',
-      };
+    'saturday' => 'Saturday',
+    'sunday' => 'Sunday',
+    _ => 'Monday',
+  };
 
   Future<void> _pickWeekStart(BuildContext context, WidgetRef ref) async {
     final settings = ref.read(settingsProvider);
@@ -392,8 +392,9 @@ class SettingsScreen extends ConsumerWidget {
     );
     if (confirmed != true) return;
     try {
-      final summary =
-          await BackupService().restore(ref.read(repositoryProvider));
+      final summary = await BackupService().restore(
+        ref.read(repositoryProvider),
+      );
       if (context.mounted) {
         showKeelSnack(
           context,
@@ -577,7 +578,11 @@ class _TextSizeSlider extends StatelessWidget {
                   color: const Color(0xFF9B5DE5),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.text_fields_outlined, size: 19, color: Colors.white),
+                child: const Icon(
+                  Icons.text_fields_outlined,
+                  size: 19,
+                  color: Colors.white,
+                ),
               ),
               const SizedBox(width: 12),
               const Expanded(
@@ -604,8 +609,7 @@ class _TextSizeSlider extends StatelessWidget {
               max: 3,
               divisions: 3,
               label: _labels[index],
-              onChanged: (v) =>
-                  settings.setTextScale(_scales[v.round()]),
+              onChanged: (v) => settings.setTextScale(_scales[v.round()]),
             ),
           ),
           Row(
@@ -662,10 +666,16 @@ class _HapticStrengthControl extends ConsumerWidget {
           Row(
             children: [
               const Expanded(
-                child: Text('Vibration Intensity', style: TextStyle(fontSize: 15)),
+                child: Text(
+                  'Vibration Intensity',
+                  style: TextStyle(fontSize: 15),
+                ),
               ),
               if (!enabled)
-                Text('Off', style: TextStyle(color: context.muted, fontSize: 13)),
+                Text(
+                  'Off',
+                  style: TextStyle(color: context.muted, fontSize: 13),
+                ),
             ],
           ),
           const SizedBox(height: 10),
@@ -696,7 +706,11 @@ class _HapticStrengthControl extends ConsumerWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           if (selected == _options[i].$1)
-                            const Icon(Icons.check, size: 16, color: Colors.white),
+                            const Icon(
+                              Icons.check,
+                              size: 16,
+                              color: Colors.white,
+                            ),
                           if (selected == _options[i].$1)
                             const SizedBox(width: 4),
                           Text(
@@ -717,15 +731,33 @@ class _HapticStrengthControl extends ConsumerWidget {
               ],
             ],
           ),
+          // 1.3.0: "Test vibration" — plays the saved strength on the
+          // spot, so the buzz can be checked without changing any
+          // setting. Lives inside this control, so it greys out with
+          // it when Haptics is off.
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => KeelHaptics.test(ref),
+              icon: const Icon(Icons.vibration_outlined, size: 18),
+              label: const Text('Test vibration'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: context.accent,
+                side: BorderSide(color: context.line),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+          ),
         ],
       ),
     );
     if (!enabled) {
       // Visible but untouchable: greyed out, taps blocked, no preview.
-      return Opacity(
-        opacity: 0.45,
-        child: IgnorePointer(child: content),
-      );
+      return Opacity(opacity: 0.45, child: IgnorePointer(child: content));
     }
     return content;
   }
@@ -744,109 +776,178 @@ class _OrgManagerSheetState extends ConsumerState<_OrgManagerSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Organizations', style: Theme.of(context).textTheme.displayMedium?.copyWith(fontSize: 24)),
+          Text(
+            'Organizations',
+            style: Theme.of(
+              context,
+            ).textTheme.displayMedium?.copyWith(fontSize: 24),
+          ),
           const SizedBox(height: 12),
-          for (final org in orgs)
+          // 1.3.0: one Apple-style grouped card with the
+          // organizations as rows inside it (iOS Settings style),
+          // instead of a separate card per org. The active check
+          // and the three-dot menu are kept.
+          if (orgs.isNotEmpty)
             KeelCard(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: Row(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              child: Column(
                 children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () async {
-                        await widget.settings.setActiveOrg(org.id);
-                      },
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(org.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                          Text(org.kind, style: TextStyle(color: context.muted, fontSize: 13)),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (activeId == org.id)
-                    Icon(Icons.check_circle, color: context.accent),
-                  PopupMenuButton<String>(
-                    icon: Icon(Icons.more_horiz, color: context.muted),
-                    onSelected: (value) async {
-                      if (value == 'rename') {
-                        final name = TextEditingController(text: org.name);
-                        final saved = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Rename organization'),
-                            content: TextField(controller: name, autofocus: true),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(false),
-                                child: const Text('Cancel'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(true),
-                                child: const Text('Save'),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (saved == true && name.text.trim().isNotEmpty) {
-                          await widget.repo.renameOrganization(org.id, name.text);
-                        }
-                        name.dispose();
-                      } else if (value == 'delete') {
-                        if (orgs.length <= 1) {
-                          if (context.mounted) {
-                            showKeelSnack(
-                              context,
-                              'Keep at least one organization.',
-                            );
-                          }
-                          return;
-                        }
-                        final confirmed = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: Text('Delete ${org.name}?'),
-                            content: const Text(
-                              'Everything inside this organization — its teams, people and tasks — will be deleted.',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(false),
-                                child: const Text('Cancel'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(true),
-                                child: const Text(
-                                  'Delete',
-                                  style: TextStyle(color: KeelTokens.overdue),
+                  for (var i = 0; i < orgs.length; i++) ...[
+                    Builder(
+                      builder: (context) {
+                        final org = orgs[i];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () async {
+                                    await widget.settings.setActiveOrg(org.id);
+                                  },
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        org.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      Text(
+                                        org.kind,
+                                        style: TextStyle(
+                                          color: context.muted,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
+                              if (activeId == org.id)
+                                Icon(Icons.check_circle, color: context.accent),
+                              PopupMenuButton<String>(
+                                icon: Icon(
+                                  Icons.more_horiz,
+                                  color: context.muted,
+                                ),
+                                onSelected: (value) async {
+                                  if (value == 'rename') {
+                                    final name = TextEditingController(
+                                      text: org.name,
+                                    );
+                                    final saved = await showDialog<bool>(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text(
+                                          'Rename organization',
+                                        ),
+                                        content: TextField(
+                                          controller: name,
+                                          autofocus: true,
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.of(
+                                              context,
+                                            ).pop(false),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.of(context).pop(true),
+                                            child: const Text('Save'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (saved == true &&
+                                        name.text.trim().isNotEmpty) {
+                                      await widget.repo.renameOrganization(
+                                        org.id,
+                                        name.text,
+                                      );
+                                    }
+                                    name.dispose();
+                                  } else if (value == 'delete') {
+                                    if (orgs.length <= 1) {
+                                      if (context.mounted) {
+                                        showKeelSnack(
+                                          context,
+                                          'Keep at least one organization.',
+                                        );
+                                      }
+                                      return;
+                                    }
+                                    final confirmed = await showDialog<bool>(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: Text('Delete ${org.name}?'),
+                                        content: const Text(
+                                          'Everything inside this organization — its teams, people and tasks — will be deleted.',
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.of(
+                                              context,
+                                            ).pop(false),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.of(context).pop(true),
+                                            child: const Text(
+                                              'Delete',
+                                              style: TextStyle(
+                                                color: KeelTokens.overdue,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirmed == true) {
+                                      if (activeId == org.id) {
+                                        final remaining = orgs
+                                            .where((o) => o.id != org.id)
+                                            .toList();
+                                        await widget.settings.setActiveOrg(
+                                          remaining.first.id,
+                                        );
+                                      }
+                                      await widget.repo.deleteOrganization(
+                                        org.id,
+                                      );
+                                    }
+                                  }
+                                },
+                                itemBuilder: (context) => const [
+                                  PopupMenuItem(
+                                    value: 'rename',
+                                    child: Text('Rename'),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'delete',
+                                    child: Text(
+                                      'Delete',
+                                      style: TextStyle(
+                                        color: KeelTokens.overdue,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         );
-                        if (confirmed == true) {
-                          if (activeId == org.id) {
-                            final remaining =
-                                orgs.where((o) => o.id != org.id).toList();
-                            await widget.settings
-                                .setActiveOrg(remaining.first.id);
-                          }
-                          await widget.repo.deleteOrganization(org.id);
-                        }
-                      }
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(value: 'rename', child: Text('Rename')),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Text(
-                          'Delete',
-                          style: TextStyle(color: KeelTokens.overdue),
-                        ),
-                      ),
-                    ],
-                  ),
+                      },
+                    ),
+                    if (i < orgs.length - 1)
+                      Divider(height: 1, color: context.line),
+                  ],
                 ],
               ),
             ),
@@ -855,36 +956,10 @@ class _OrgManagerSheetState extends ConsumerState<_OrgManagerSheet> {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () async {
-                final name = TextEditingController();
-                final created = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('New organization'),
-                    content: TextField(
-                      controller: name,
-                      autofocus: true,
-                      decoration: const InputDecoration(hintText: 'Organization name'),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(false),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(true),
-                        child: const Text('Create'),
-                      ),
-                    ],
-                  ),
-                );
-                if (created == true && name.text.trim().isNotEmpty) {
-                  final org = await widget.repo.createOrganization(
-                    name: name.text,
-                    kind: 'Other',
-                  );
-                  await widget.settings.setActiveOrg(org.id);
-                }
-                name.dispose();
+                // 1.3.0: name + type picker in a proper sheet, not a
+                // bare name-only popup (DECISIONS.md 40). The sheet
+                // makes the new org active itself.
+                await showNewOrganizationSheet(context);
               },
               icon: const Icon(Icons.add, size: 20),
               label: const Text('Add organization'),
@@ -1016,7 +1091,11 @@ class _SettingsRow extends StatelessWidget {
               ),
               trailing ??
                   (onTap != null
-                      ? Icon(Icons.chevron_right, color: context.muted, size: 20)
+                      ? Icon(
+                          Icons.chevron_right,
+                          color: context.muted,
+                          size: 20,
+                        )
                       : const SizedBox.shrink()),
             ],
           ),
@@ -1063,7 +1142,10 @@ class AboutPage extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
           tooltip: 'Back to Settings',
         ),
-        title: Text('Settings', style: TextStyle(color: context.accent, fontSize: 17)),
+        title: Text(
+          'Settings',
+          style: TextStyle(color: context.accent, fontSize: 17),
+        ),
         centerTitle: false,
       ),
       body: ListView(
@@ -1081,17 +1163,24 @@ class AboutPage extends StatelessWidget {
                   colors: [Color(0xFF12A0AB), Color(0xFF0B4F66)],
                 ),
               ),
-              child: const Icon(Icons.anchor_rounded, size: 50, color: Colors.white),
+              child: const Icon(
+                Icons.anchor_rounded,
+                size: 50,
+                color: Colors.white,
+              ),
             ),
           ),
           const SizedBox(height: 14),
           Center(
-            child: Text('Keel', style: Theme.of(context).textTheme.displayLarge),
+            child: Text(
+              'Keel',
+              style: Theme.of(context).textTheme.displayLarge,
+            ),
           ),
           const SizedBox(height: 4),
           Center(
             child: Text(
-              'Version 1.0.0 · Works fully offline',
+              'Version 1.3.0 · Works fully offline',
               style: TextStyle(color: context.muted, fontSize: 13),
             ),
           ),
@@ -1112,12 +1201,30 @@ class AboutPage extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             child: Column(
               children: [
-                _FeatureRow(icon: Icons.group_outlined, text: 'Teams with one leader and one main task'),
-                _FeatureRow(icon: Icons.check_box_outlined, text: 'Tasks with sub-tasks, due dates and priorities'),
-                _FeatureRow(icon: Icons.person_outline, text: 'People with phones, emails, photos and notes'),
-                _FeatureRow(icon: Icons.business_outlined, text: 'Multiple organizations, all on-device'),
-                _FeatureRow(icon: Icons.cloud_off_outlined, text: 'No account, no server, no internet'),
-                _FeatureRow(icon: Icons.backup_outlined, text: 'Backup and restore from a file you control'),
+                _FeatureRow(
+                  icon: Icons.group_outlined,
+                  text: 'Teams with one leader and one main task',
+                ),
+                _FeatureRow(
+                  icon: Icons.check_box_outlined,
+                  text: 'Tasks with sub-tasks, due dates and priorities',
+                ),
+                _FeatureRow(
+                  icon: Icons.person_outline,
+                  text: 'People with phones, emails, photos and notes',
+                ),
+                _FeatureRow(
+                  icon: Icons.business_outlined,
+                  text: 'Multiple organizations, all on-device',
+                ),
+                _FeatureRow(
+                  icon: Icons.cloud_off_outlined,
+                  text: 'No account, no server, no internet',
+                ),
+                _FeatureRow(
+                  icon: Icons.backup_outlined,
+                  text: 'Backup and restore from a file you control',
+                ),
               ],
             ),
           ),
@@ -1152,8 +1259,21 @@ class AboutPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Aby Bijo', style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w800, fontSize: 18)),
-                      Text('Designer and developer', style: TextStyle(color: Color(0xFF7B8894), fontSize: 13)),
+                      Text(
+                        'Aby Bijo',
+                        style: TextStyle(
+                          fontFamily: 'Nunito',
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                        ),
+                      ),
+                      Text(
+                        'Designer and developer',
+                        style: TextStyle(
+                          color: Color(0xFF7B8894),
+                          fontSize: 13,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1182,7 +1302,8 @@ class AboutPage extends StatelessWidget {
             background: const Color(0xFFF5C33B),
             foreground: const Color(0xFF1B1400),
             icon: Icons.coffee_outlined,
-            onPressed: () => _open(context, KeelLinks.buyMeACoffee, 'Buy Me a Coffee'),
+            onPressed: () =>
+                _open(context, KeelLinks.buyMeACoffee, 'Buy Me a Coffee'),
           ),
         ],
       ),
@@ -1203,7 +1324,12 @@ class _FeatureRow extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: context.accent),
           const SizedBox(width: 12),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 14, height: 1.35))),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 14, height: 1.35),
+            ),
+          ),
         ],
       ),
     );

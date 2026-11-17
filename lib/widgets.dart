@@ -590,7 +590,11 @@ class KeelSegmented<T> extends StatelessWidget {
 // Buttons
 // ---------------------------------------------------------------------------
 
-class KeelButton extends StatelessWidget {
+/// Primary button. A ConsumerWidget (1.3.0): every press plays the
+/// saved haptic strength, so saves and creates buzz like the
+/// checkboxes do — the button is the single choke point for all of
+/// them. Disabled buttons stay silent.
+class KeelButton extends ConsumerWidget {
   final String label;
   final VoidCallback? onPressed;
   final Color? background;
@@ -609,13 +613,18 @@ class KeelButton extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final bg = background ?? (secondary ? context.card : context.ink);
     final fg = foreground ?? (secondary ? context.ink : context.bg);
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
-        onPressed: onPressed,
+        onPressed: onPressed == null
+            ? null
+            : () {
+                KeelHaptics.impact(ref);
+                onPressed!();
+              },
         style: ElevatedButton.styleFrom(
           backgroundColor: bg,
           foregroundColor: fg,

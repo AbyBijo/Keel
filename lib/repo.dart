@@ -48,6 +48,45 @@ bool isDueSoon(Task task, {DateTime? now}) {
   return diff >= 0 && diff <= 2;
 }
 
+/// The storage key for a calendar day: local 'yyyy-MM-dd' (1.3.0,
+/// calendar day notes). A calendar date has no time, so the key is
+/// exact with no timezone normalisation.
+String dayKey(DateTime date) =>
+    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+/// Up next selection, pure so the Home provider and the repo share
+/// one rule (1.3.0, DECISIONS.md 38). Open tasks first — overdue
+/// first, then soonest due, undated last — capped at [limit]; then
+/// tasks completed within the last 24 hours, most recently completed
+/// first, also capped at [limit]. A completed task drops to the
+/// bottom of the list instead of vanishing, and is gone after about
+/// 24 hours. The digest counts and due-soon logic are untouched.
+List<Task> selectUpNext(List<Task> all, {DateTime? now, int limit = 3}) {
+  final n = now ?? DateTime.now();
+  final open = all.where((t) => !t.isDone).toList();
+  open.sort((a, b) {
+    final ao = isOverdue(a, now: n) ? 0 : 1;
+    final bo = isOverdue(b, now: n) ? 0 : 1;
+    if (ao != bo) return ao - bo;
+    final da = a.dueDate, dbb = b.dueDate;
+    if (da == null && dbb == null) return 0;
+    if (da == null) return 1;
+    if (dbb == null) return -1;
+    return da.compareTo(dbb);
+  });
+  final recent = all
+      .where(
+        (t) =>
+            t.isDone &&
+            t.completedAt != null &&
+            !t.completedAt!.isAfter(n) &&
+            n.difference(t.completedAt!) < const Duration(hours: 24),
+      )
+      .toList()
+    ..sort((a, b) => b.completedAt!.compareTo(a.completedAt!));
+  return [...open.take(limit), ...recent.take(limit)];
+}
+
 /// A deleted entity plus everything needed to put it back (Undo, rule 10).
 class DeleteSnapshot {
   final String kind; // 'task' | 'person' | 'team'
@@ -125,6 +164,8 @@ class KeelRepository {
       for (final t in tasks) {
         await _deleteTaskRows(t.id);
       }
+      await (db.delete(db.dayNotes)..where((t) => t.orgId.equals(orgId)))
+          .go();
       await (db.delete(db.teams)..where((t) => t.orgId.equals(orgId))).go();
       await (db.delete(db.people)..where((t) => t.orgId.equals(orgId))).go();
       await (db.delete(db.organizations)..where((t) => t.id.equals(orgId)))
@@ -936,21 +977,66 @@ class KeelRepository {
     );
   }
 
-  /// Up next: 2–3 most urgent open tasks — overdue first, then soonest due.
+  /// Up next: 2–3 most urgent open tasks — overdue first, then soonest due —
+  /// plus tasks completed within the last 24 hours, at the bottom.
+  /// (1.3.0, DECISIONS.md 38: a ticked-off task drops to the bottom
+  /// instead of vanishing, and is gone after about 24 hours.)
   Future<List<Task>> upNext(String orgId, {int limit = 3}) async {
-    final tasks = (await getTasks(orgId)).where((t) => !t.isDone).toList();
-    final now = DateTime.now();
-    tasks.sort((a, b) {
-      final ao = isOverdue(a, now: now) ? 0 : 1;
-      final bo = isOverdue(b, now: now) ? 0 : 1;
-      if (ao != bo) return ao - bo;
-      final da = a.dueDate, dbb = b.dueDate;
-      if (da == null && dbb == null) return 0;
-      if (da == null) return 1;
-      if (dbb == null) return -1;
-      return da.compareTo(dbb);
-    });
-    return tasks.take(limit).toList();
+    return selectUpNext(await getTasks(orgId), limit: limit);
+  }
+
+  // -- day notes (calendar, 1.3.0) ------------------------------------------
+
+  Future<DayNote?> getDayNote(String orgId, String date) =>
+      (db.select(db.dayNotes)
+            ..where((t) => t.orgId.equals(orgId) & t.date.equals(date)))
+          .getSingleOrNull();
+
+  Stream<DayNote?> watchDayNote(String orgId, String date) =>
+      (db.select(db.dayNotes)
+            ..where((t) => t.orgId.equals(orgId) & t.date.equals(date)))
+          .watchSingleOrNull();
+
+  Future<List<DayNote>> getDayNotes(String orgId) =>
+      (db.select(db.dayNotes)..where((t) => t.orgId.equals(orgId))).get();
+
+  Stream<List<DayNote>> watchDayNotes(String orgId) =>
+      (db.select(db.dayNotes)..where((t) => t.orgId.equals(orgId))).watch();
+
+  /// Save (upsert) a day note; an empty note deletes the row, so a day
+  /// with no note has no row at all.
+  Future<void> saveDayNote(String orgId, String date, String note) async {
+    final trimmed = note.trim();
+    if (trimmed.isEmpty) {
+      await deleteDayNote(orgId, date);
+      return;
+    }
+    final existing = await getDayNote(orgId, date);
+    if (existing == null) {
+      await db.into(db.dayNotes).insert(
+            DayNote(
+              id: newId(),
+              orgId: orgId,
+              date: date,
+              note: trimmed,
+              updatedAt: DateTime.now(),
+            ),
+          );
+    } else {
+      await (db.update(db.dayNotes)..where((t) => t.id.equals(existing.id)))
+          .write(
+        DayNotesCompanion(
+          note: Value(trimmed),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+    }
+  }
+
+  Future<void> deleteDayNote(String orgId, String date) async {
+    await (db.delete(db.dayNotes)
+          ..where((t) => t.orgId.equals(orgId) & t.date.equals(date)))
+        .go();
   }
 
   // -- backup / restore -------------------------------------------------------
@@ -964,7 +1050,7 @@ class KeelRepository {
         (await get()).map((e) => (e as dynamic).toJson() as Map<String, dynamic>).toList();
     return {
       'format': 'keel-backup',
-      'version': 1,
+      'version': 2,
       'exportedAt': DateTime.now().toIso8601String(),
       'organizations': await rows(getOrganizations),
       'profile': (await getProfile())?.toJson(),
@@ -978,6 +1064,7 @@ class KeelRepository {
       'tasks': await rows(() => (db.select(db.tasks)).get()),
       'taskAssignees': await rows(() => (db.select(db.taskAssignees)).get()),
       'subTodos': await rows(() => (db.select(db.subTodos)).get()),
+      'dayNotes': await rows(() => (db.select(db.dayNotes)).get()),
     };
   }
 
@@ -991,7 +1078,9 @@ class KeelRepository {
     if (data['format'] != 'keel-backup') {
       return 'This file is not a Keel backup.';
     }
-    if (data['version'] != 1) {
+    // v1 backups (before 1.3.0) have no dayNotes; v2 adds them.
+    // Both restore; a v1 backup simply restores with no day notes.
+    if (data['version'] != 1 && data['version'] != 2) {
       return 'Unsupported backup version (${data['version']}).';
     }
     for (final key in [
@@ -1011,6 +1100,13 @@ class KeelRepository {
         if (row is! Map) return 'Backup $key has a damaged entry.';
       }
     }
+    if (data['version'] == 2) {
+      final v = data['dayNotes'];
+      if (v is! List) return 'Backup is missing its dayNotes list.';
+      for (final row in v) {
+        if (row is! Map) return 'Backup dayNotes has a damaged entry.';
+      }
+    }
     return null;
   }
 
@@ -1022,6 +1118,7 @@ class KeelRepository {
     if (error != null) throw FormatException(error);
     int count(List? l) => l?.length ?? 0;
     await db.transaction(() async {
+      await db.delete(db.dayNotes).go();
       await db.delete(db.subTodos).go();
       await db.delete(db.taskAssignees).go();
       await db.delete(db.tasks).go();
@@ -1065,6 +1162,11 @@ class KeelRepository {
       await insertAll(db.taskAssignees, data['taskAssignees'] as List,
           TaskAssignee.fromJson);
       await insertAll(db.subTodos, data['subTodos'] as List, SubTodo.fromJson);
+      // v1 backups have no dayNotes — restore with none.
+      final dayNotes = data['dayNotes'];
+      if (dayNotes is List) {
+        await insertAll(db.dayNotes, dayNotes, DayNote.fromJson);
+      }
     });
     return (
       orgs: count(data['organizations'] as List?),

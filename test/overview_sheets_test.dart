@@ -7,6 +7,7 @@ import 'package:keel/providers.dart';
 import 'package:keel/repo.dart';
 import 'package:keel/sheets.dart';
 import 'package:keel/theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// One org + two people + one team + one task, in an in-memory DB.
 /// The repo's `db` is handed to the ProviderScope override.
@@ -59,9 +60,17 @@ Future<void> pumpHost(
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
   });
+  // 1.3.0: sheets now reconcile notification reminders on
+  // Complete/Delete, which reads settings — so the harness must
+  // provide mock SharedPreferences, like pumpKeel does.
+  SharedPreferences.setMockInitialValues({});
+  final prefs = await SharedPreferences.getInstance();
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [databaseProvider.overrideWithValue(db)],
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
       child: MaterialApp(
         theme: keelThemeData(
           brightness: Brightness.light,

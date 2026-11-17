@@ -347,11 +347,40 @@ final personTasksProvider = StreamProvider.family<List<Task>, String>((
   }
 });
 
+/// Day notes for the calendar, live (1.3.0).
+final dayNotesProvider = StreamProvider.family<List<DayNote>, String>((
+  ref,
+  orgId,
+) {
+  return ref.watch(repositoryProvider).watchDayNotes(orgId);
+});
+
+/// Which sub-tab of the merged Teams tab is showing (1.3.0):
+/// 'teams' | 'people'. Default Teams. Set by the Home stat tiles
+/// and by the segmented control just above the bottom bar.
+final teamsTabSubProvider = StateProvider<String>((ref) => 'teams');
+
+/// Up next, live (1.3.0): the Home section used to re-create a
+/// one-shot future on every build, so the list reloaded and jumped
+/// while scrolling. This streams the tasks and selects with the same
+/// pure rule as the repo ([selectUpNext]) — open tasks first,
+/// recently completed ones at the bottom for ~24h.
+final upNextProvider = StreamProvider.family<List<Task>, String>((
+  ref,
+  orgId,
+) async* {
+  final repo = ref.watch(repositoryProvider);
+  await for (final tasks in repo.watchTasks(orgId)) {
+    yield selectUpNext(tasks);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Tab navigation state (kept in the shell, not here)
 // ---------------------------------------------------------------------------
 
-/// Which tab is active: 0 Home, 1 Tasks, 2 Teams, 3 People, 4 Settings.
+/// Which tab is active: 0 Home, 1 Tasks, 2 Teams (merged Teams +
+/// People), 3 Calendar, 4 Settings.
 final tabIndexProvider = StateProvider<int>((ref) => 0);
 
 /// Tasks tab filter requested from elsewhere (e.g. Home "Overdue" tile).

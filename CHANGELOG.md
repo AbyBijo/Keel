@@ -1,5 +1,112 @@
 # Changelog
 
+## 1.3.0 — 2026-11-17
+
+Built 2026-11-17; release target: weekend 21–22 Nov 2026 (after on-device testing).
+
+Haptics, notifications, Home scroll and the Teams + People merge
+with Calendar, from on-device testing of 1.2.0.
+
+### Haptics — what went wrong (diagnosed 2026-11-16)
+
+- The settings wiring is correct: the toggle and the intensity save
+  properly, the preview fires after saving, and the call sites exist.
+  The bug is the API underneath. `HapticFeedback` on Android is not
+  a vibration — it is a polite request to the system, and on many
+  phones the system's touch-vibration setting is off, so the request
+  is silently ignored: no error, no buzz, and the app never knows.
+  Even when it does fire, Light / Medium / Heavy are a few
+  milliseconds apart, so the three strengths feel almost identical.
+- Fix: drive the motor directly with the `vibration`
+  package — explicit durations and amplitudes per strength
+  (Light ~15 ms soft, Medium ~30 ms, Heavy ~60 ms strong) — which
+  does not depend on the system's touch-vibration toggle. Add a
+  "Test vibration" button in Settings so the buzz can be checked
+  on the spot, and wire haptics to more places (checkboxes, saves,
+  deletes), not just tab taps and the add button.
+
+### Notifications
+
+- Today there is only one notification: a daily digest at a set
+  time (default 8:00 AM). Two flaws: the digest text is computed
+  once when it is switched on, then the same text repeats every
+  day, so the counts go stale; and there are no per-task reminders
+  — a task due at a set time never pings you.
+- Fix: compute the digest counts fresh each morning;
+  add per-task reminders — one on the due date and one when a task
+  goes overdue (user decision, 2026-11-16: both); raise the
+  channel to high importance so it shows and buzzes instead of
+  arriving silently.
+
+### Home scroll — what went wrong (diagnosed 2026-11-16)
+
+- Sometimes the Home page refuses to scroll. The animations are
+  NOT the cause: the dial's press spring and the ring's count-up
+  are transform / opacity / paint only and never intercept touch,
+  the dial listens with a `Listener` (which cannot steal a scroll
+  gesture), the first-time fade-in runs once ever, and the
+  scroll-to-top animation is 300 ms and is cancelled by a touch.
+- The cause is the horizontal team strip nested inside the
+  vertical Home list. A swipe starting on the strip pits the
+  strip's horizontal drag against the page's vertical drag, and
+  if the finger moves even slightly sideways first, the strip
+  wins and the page never scrolls — it feels exactly like the app
+  ignoring the swipe. It is intermittent because it depends on
+  where the finger lands and the first millimetres of movement,
+  and it is Home-only because no other tab nests a horizontal
+  list. The tab bar's heavy background blur can also drop frames
+  and make a scroll feel dead on weaker phones.
+- Fix: rebuild the team strip so it cannot claim
+  vertical drags (horizontal-only drag handling with a higher
+  movement threshold), and verify on-device that a vertical swipe
+  starting on the strip always scrolls the page. Also lighten or
+  drop the tab bar's background blur, and stop recreating the
+  Up-next future on every build (it reloads the section on each
+  rebuild, which makes the list jump while scrolling).
+
+### Edit sheets
+
+- Editing a team or a person currently opens a small popup with
+  only a few fields. In 1.3.0 both reuse their create sheet: the
+  same slide-up window, pre-filled, with everything changeable —
+  the way task editing already works.
+
+### Task cards + Up next
+
+- A task card currently lists every sub-todo, so a task with many
+  sub-todos makes the card huge. In 1.3.0 the preview shows only
+  the next sub-todo to do, and the done ones as a count ('2 of 8
+  done'); the full list stays on the task page.
+- A completed task currently vanishes from Home's Up next the
+  moment it is ticked off. In 1.3.0 it drops to the bottom of the
+  Up next list, under all open tasks, shown as done, and is
+  removed after about 24 hours.
+
+### Calendar + merged Teams tab
+
+- Teams and People merge into one tab (sub-tabs Teams | People
+  above the bottom bar, default Teams); Calendar takes People's
+  spot — month view of task due dates, dots for open tasks,
+  overdue red, tap a day to see and add its tasks, week rows
+  follow Week Starts On. The merge and the calendar are wired
+  through the whole app (Home tiles, tab bar, Add sheet, search,
+  notifications), not a bolted-on tab.
+- Calendar notes: the user can keep a note for a day and for a
+  task. On a day, the day note is the most prominent thing shown;
+  a task's note is shown with the task on its day.
+
+### Organizations
+
+- Creating an organization from Settings asks for a name only
+  and silently saves every new org as 'Other' — the type can
+  never be chosen. In 1.3.0 creation is a proper flow: name plus
+  a type picker (Studio, Company, Club, Family, Other), wherever
+  organizations are created — as an uncluttered slide-up sheet
+  like task/team creation. The initial org in onboarding keeps
+  its own flow. The org list becomes one Apple-style grouped card
+  with the organizations as rows inside it, instead of a separate
+  card per org.
+
 ## 1.2.0 — 2026-11-15
 
 On-device fix round, based on testing the 1.1.0 build on a real phone.

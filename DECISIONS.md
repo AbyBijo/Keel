@@ -250,3 +250,96 @@ arm64-v8a 22.4 MB, armeabi-v7a 20.0 MB, x86_64 23.6 MB; debug
     and the new pure helper `startOfWeek` (`lib/theme.dart`) reads
     it, tested in `test/week_start_test.dart`, ready for the first
     week-based view.
+
+37. **Edit reuses the create sheet — teams and people (user
+    decision, 2026-11-16, not yet built).** Tasks already work
+    this way: editing opens the same slide-up sheet as creating,
+    pre-filled, with everything changeable. Teams and people do
+    not: `_editTeam` (`teams.dart`) and `_editPerson`
+    (`people.dart`) are small `AlertDialog` popups — name +
+    colour for a team, name + role + notes for a person. In
+    1.3.0 both are replaced: 'Edit team' (three-dot menu and
+    inside the team page) opens the create-team sheet pre-filled
+    — name, colour, leader, members, main task, all changeable
+    from that one window; editing a person opens the
+    create-person sheet pre-filled — phones, emails, photo, notes
+    and teams all changeable. One sheet for create and edit, no
+    separate edit popups.
+
+38. **Task card sub-todo preview + Up next keeps done tasks 24 h
+    (user decisions, 2026-11-17, not yet built).** The task card
+    currently lists every sub-todo, so a task with many sub-todos
+    makes the card huge. In 1.3.0 the preview shows only what
+    matters right now: the next sub-todo to do, and the done ones
+    as a count ('2 of 8 done') — the full list lives on the task
+    page. Up next currently filters out done tasks at once
+    (`upNext` keeps only `!isDone`), so a ticked-off task vanishes
+    from Home instantly. In 1.3.0 a completed task drops to the
+    bottom of the Up next list, under all open tasks, shown as
+    done, and is removed after about 24 hours. (Correction
+    2026-11-17: bottom of the list, not under the next task as
+    first articulated.)
+
+39. **Calendar notes — day notes and task notes (user decision,
+    2026-11-17, not yet built).** The calendar lets the user keep
+    a note for a day and also for a task (task notes already
+    exist). On a day, if the day has a note it is the most
+    prominent thing shown; if a task on that day has a note, that
+    note is shown with the task — on the day the task is assigned
+    or its deadline day. Day notes are new (a day-note store
+    scoped to the active organization); task notes ride on the
+    existing task notes field.
+
+40. **Organization creation must let the user pick the type; org
+    rows combined Apple-style (user decision, 2026-11-17, not yet
+    built).** Creating an organization from Settings opens a bare
+    popup asking for a name only, then silently saves every new
+    org as kind 'Other' — the type can never be chosen, which is
+    why existing orgs all show 'Other' even though the app
+    supports Studio, Company, Club, Family, Other. In 1.3.0
+    creation becomes a proper flow: name plus a type picker with
+    the five kinds, in a proper sheet, applied wherever
+    organizations are created (Settings and the org switcher).
+    The org list tiles are combined Apple-style: one grouped card
+    with the organizations as rows inside it (iOS Settings
+    style) instead of a separate card per org, keeping the active
+    check and the three-dot menu, without breaking the existing
+    look. Refinement (user, 2026-11-17): the creation form must
+    stay uncluttered and easy — the same slide-up sheet pattern
+    as creating a task or a team (name + type picker, done right
+    there), not a long form. The only organization creation that
+    goes through a longer flow is the initial one inside
+    onboarding, which already has its own kind picker (default
+    Studio); that stays exactly as it is.
+
+35. **Merge Teams + People; add a Calendar tab (user decision,
+    2026-11-16, not yet built).** The bottom bar stays five tabs:
+    Home, Tasks, Teams (merged), Calendar, Settings. Calendar
+    takes People's old spot (index 3). The merged Teams tab gets
+    two sub-tabs (segmented control) just above the bottom bar,
+    Teams | People, defaulting to Teams; both lists keep their own
+    screens, People keeps its live search, and the Home stat tiles
+    route to the right sub-tab. Rejected: merging Tasks + Teams
+    (buries the daily task list and breaks the Home shortcuts into
+    it) and merging Tasks + People (unrelated lists — contacts and
+    calls have nothing to do with the task list). Teams + People
+    won because they are the same domain: a team is people, every
+    person is a potential member or leader, and the database
+    already joins them (`TeamMember`). Calendar: month view of task
+    due dates (the only dates in the app), scoped to the active
+    organization; dots on days with open tasks, overdue in red;
+    tap a day to see that day's tasks, with a way to add a task due
+    that day; week rows start on the Week Starts On setting, which
+    finally gets a visible use. Part of the v1.3.0 scope with the
+    haptics fix, the notification rework and the Home scroll fix
+    (see CHANGELOG.md Unreleased). Build rule (user, 2026-11-17):
+    the merge and the calendar are wired through the whole app —
+    Home tiles, tab bar, Add sheet, search, notifications, week
+    start — not a bolted-on tab.
+
+36. **Per-task reminders fire twice (user decision, 2026-11-16).**
+    A task with a due date gets one reminder on its due date and
+    a second one when it goes overdue — both, not one or the
+    other. Tasks carry due dates, not times, so the due-date
+    reminder lands on the due day; the exact time of day for each
+    is a build-time detail.
