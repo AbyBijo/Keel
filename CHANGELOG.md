@@ -2,7 +2,7 @@
 
 ## 1.3.0 — 2026-11-17
 
-Built 2026-11-17; release target: weekend 21–22 Nov 2026 (after on-device testing).
+Built and released 2026-11-17.
 
 Haptics, notifications, Home scroll and the Teams + People merge
 with Calendar, from on-device testing of 1.2.0.
